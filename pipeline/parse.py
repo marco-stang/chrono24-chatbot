@@ -42,7 +42,8 @@ MAIN_CONTENT_ID = "main-content"
 HEADING_NAMES = ("h1", "h2", "h3")
 CHUNK_HEADING_NAMES = ("h2", "h3")
 
-MIN_DOCS = 30
+MIN_FAQ_DOCS = 100
+MIN_CHUNK_DOCS = 50
 MAX_CHUNK_WORDS = 600
 
 REQUIRED_FIELDS = {
@@ -205,15 +206,26 @@ def build_corpus(raw_dir: Path) -> dict:
     for path in sorted(raw_dir.glob("*.html")):
         if path.name == faq_name:
             continue
-        docs = docs + parse_info_page(path.read_text(encoding="utf-8"), filename_to_url(path.name))
+        page_docs = parse_info_page(path.read_text(encoding="utf-8"), filename_to_url(path.name))
+        if not page_docs:
+            print(f"WARNUNG: {path.name} lieferte 0 Dokumente")
+        docs = docs + page_docs
     scraped_at = datetime.now(tz=UTC).date().isoformat()
     return {"scraped_at": scraped_at, "documents": docs}
 
 
 def validate_corpus(corpus: dict) -> None:
     docs = corpus.get("documents", [])
-    if len(docs) < MIN_DOCS:
-        raise CorpusValidationError(f"nur {len(docs)} Dokumente, erwartet mindestens {MIN_DOCS}")
+    faq_count = sum(1 for doc in docs if doc.get("type") == "faq")
+    chunk_count = sum(1 for doc in docs if doc.get("type") == "page_chunk")
+    if faq_count < MIN_FAQ_DOCS:
+        raise CorpusValidationError(
+            f"nur {faq_count} FAQ-Dokumente, erwartet mindestens {MIN_FAQ_DOCS}"
+        )
+    if chunk_count < MIN_CHUNK_DOCS:
+        raise CorpusValidationError(
+            f"nur {chunk_count} Seiten-Chunk-Dokumente, erwartet mindestens {MIN_CHUNK_DOCS}"
+        )
     seen: set[str] = set()
     for doc in docs:
         fields = REQUIRED_FIELDS.get(doc.get("type", ""))
