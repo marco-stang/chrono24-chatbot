@@ -36,6 +36,8 @@ FastAPI
 
 Der Server braucht zur Laufzeit kein Scraping und keinen Zugriff auf
 Chrono24 — nur den fertigen Index aus dem Repo und den Anthropic-API-Key.
+`data/corpus.json` ist ein zwischengespeicherter Snapshot öffentlicher
+Chrono24-Hilfeseiten zu Demo-Zwecken, kein Live-Datenzugriff.
 
 ## Warum Hybrid-RAG
 
@@ -77,6 +79,10 @@ python -m venv .venv
 
 Danach `http://localhost:8000` im Browser öffnen.
 
+Chroma verändert Index-Dateien unter `data/index/` schon beim bloßen Öffnen
+(z. B. durch lokales Starten oder Testläufe) — solche unstaged Änderungen
+mit `git restore data/index/` verwerfen, bevor committet wird.
+
 ## Pipeline neu bauen
 
 Nur nötig, wenn sich die Chrono24-Hilfeseiten geändert haben oder der Index
@@ -85,6 +91,10 @@ neu erzeugt werden soll:
 ```bash
 python -m pipeline.scrape && python -m pipeline.parse && python -m pipeline.index
 ```
+
+Bei einem chromadb-Upgrade (Version in `requirements.txt`) muss der Index
+danach neu gebaut werden — das committete Format ist an die gepinnte Version
+gekoppelt.
 
 ## Tests
 
@@ -105,3 +115,32 @@ python -m eval.run_eval
 - **Rate-Limit:** 10 Anfragen/Minute und 50 Anfragen/Tag pro IP.
 - **Tagesbudget:** 200.000 Tokens/Tag global, danach liefert `/api/chat`
   `429` bis zum nächsten Tag.
+
+Das Rate-Limit greift pro Client-IP (`get_remote_address`). Hinter einem
+Reverse Proxy wie auf Render sieht uvicorn ohne Weiteres nur die
+Proxy-IP — damit teilen sich dann alle Besucher:innen einen einzigen
+Rate-Limit-Eimer. Deshalb läuft uvicorn dort mit
+`--forwarded-allow-ips="*"` (siehe Dockerfile-`CMD`), damit es die
+`X-Forwarded-For`-Adresse des Proxys übernimmt. Lokal ohne Proxy ist das
+wirkungslos, weil Clients den Server dort direkt erreichen. Trade-off: der
+`X-Forwarded-For`-Header ist grundsätzlich spoofbar, das Rate-Limit ist also
+kein hartes Sicherheitsnetz — das globale Tagesbudget bleibt der eigentliche
+Kostendeckel, unabhängig von der IP.
+
+## Deployment (Render)
+
+Läuft als Docker-Runtime (siehe `Dockerfile`) auf Render.
+
+- **Env-Var:** `ANTHROPIC_API_KEY` muss gesetzt sein — ohne ihn startet der
+  Service gar nicht erst (fail-fast beim Boot statt kaputter Antworten zur
+  Laufzeit).
+- **Health-Check-Pfad:** `/api/health`.
+- **Kaltstart:** auf dem Render-Free-Tier ca. 30 s, weil der Container nach
+  Inaktivität einschläft.
+- **Proxy:** `--forwarded-allow-ips="*"` ist im Dockerfile-`CMD` gesetzt,
+  siehe Begründung im Guards-Abschnitt oben.
+- **Tagesbudget ist nicht persistent:** der Token-Zähler liegt in SQLite auf
+  dem ephemeren Dateisystem des Containers und resettet bei jedem Neustart
+  oder Redeploy — das Tagesbudget ist also kein verlässlicher Kostendeckel
+  über einen Neustart hinweg, sondern nur innerhalb einer laufenden
+  Instanz.
