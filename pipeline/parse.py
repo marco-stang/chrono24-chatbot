@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 from bs4.element import Tag
 
 FAQ_CHAPTER_CLASS = "js-faq-chapter"
@@ -116,6 +116,8 @@ def _text_until_next_heading(tag: Tag) -> str:
     """
     parts: list[str] = []
     for sibling in tag.next_siblings:
+        if isinstance(sibling, Comment):
+            continue
         if isinstance(sibling, Tag):
             if sibling.name in HEADING_NAMES:
                 break
@@ -127,6 +129,17 @@ def _text_until_next_heading(tag: Tag) -> str:
     return "\n".join(parts)
 
 
+def _hard_split_words(words: list[str], max_words: int) -> list[str]:
+    """Teilt eine Wortliste hart in max_words-Wörter-Stücke.
+
+    Greift, wenn ein einzelner Absatz für sich allein schon über dem Limit
+    liegt (z. B. eine 700-Wörter-Zeile ohne Zeilenumbrüche) — sonst würde
+    `_split_long_text` diesen Absatz unzerteilt zurückgeben und das
+    MAX_CHUNK_WORDS-Limit verletzen.
+    """
+    return [" ".join(words[i : i + max_words]) for i in range(0, len(words), max_words)]
+
+
 def _split_long_text(text: str, max_words: int = MAX_CHUNK_WORDS) -> list[str]:
     if len(text.split()) <= max_words:
         return [text]
@@ -134,12 +147,18 @@ def _split_long_text(text: str, max_words: int = MAX_CHUNK_WORDS) -> list[str]:
     current: list[str] = []
     count = 0
     for paragraph in text.split("\n"):
-        words = len(paragraph.split())
-        if current and count + words > max_words:
+        words = paragraph.split()
+        if len(words) > max_words:
+            if current:
+                parts.append("\n".join(current))
+                current, count = [], 0
+            parts.extend(_hard_split_words(words, max_words))
+            continue
+        if current and count + len(words) > max_words:
             parts.append("\n".join(current))
             current, count = [], 0
         current.append(paragraph)
-        count += words
+        count += len(words)
     if current:
         parts.append("\n".join(current))
     return parts
