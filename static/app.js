@@ -111,5 +111,5 @@ form.addEventListener("submit", (e) => {
 });
 
 examplesEl.addEventListener("click", (e) => {
-  if (e.target.classList.contains("example")) ask(e.target.textContent);
+  if (!sendBtn.disabled && e.target.classList.contains("example")) ask(e.target.textContent);
 });
