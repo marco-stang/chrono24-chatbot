@@ -6,6 +6,7 @@ import pickle
 from pathlib import Path
 
 import chromadb
+from chromadb.errors import NotFoundError
 from rank_bm25 import BM25Okapi
 
 from app.config import settings
@@ -39,8 +40,8 @@ def build_index(corpus_path: Path, index_dir: Path, encoder=None) -> None:
     client = chromadb.PersistentClient(path=str(index_dir / "chroma"))
     try:
         client.delete_collection("docs")
-    except Exception:
-        pass
+    except NotFoundError:
+        pass  # Idempotentes Aufräumen: beim ersten Lauf existiert die Collection noch nicht.
     coll = client.create_collection("docs", metadata={"hnsw:space": "cosine"})
     coll.add(ids=[d["id"] for d in docs], embeddings=encoder([doc_embed_text(d) for d in docs]))
 
