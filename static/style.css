@@ -40,7 +40,11 @@ header h1 { font-size: 1.3rem; }
 
 .msg { padding: 0.6rem 0.9rem; border-radius: 10px; white-space: pre-wrap; max-width: 90%; }
 .msg.user { background: var(--user); align-self: flex-end; }
-.msg.bot { background: var(--panel); align-self: flex-start; }
+.msg.bot { background: var(--panel); align-self: flex-start; white-space: normal; }
+.msg.bot p { margin: 0 0 0.5rem; }
+.msg.bot p:last-child { margin-bottom: 0; }
+.msg.bot ul { margin: 0 0 0.5rem 1.2rem; padding: 0; }
+.msg.bot li { margin-bottom: 0.25rem; }
 
 .sources { font-size: 0.85rem; color: var(--muted); }
 .sources a { color: var(--accent); margin-right: 0.5rem; }

@@ -6,6 +6,39 @@ const examplesEl = document.getElementById("examples");
 
 const history = [];
 
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+// Rendert das Markdown-Subset der Bot-Antworten (Fett, Listen, Absätze).
+// Eingabe wird zuerst HTML-escaped — erst danach entsteht Markup.
+function renderMarkdown(text) {
+  const inline = (s) => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const blocks = [];
+  let listItems = [];
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push(`<ul>${listItems.map((li) => `<li>${li}</li>`).join("")}</ul>`);
+      listItems = [];
+    }
+  };
+  for (const line of text.split("\n")) {
+    const item = line.match(/^\s*[-*]\s+(.*)/);
+    if (item) {
+      listItems.push(inline(item[1]));
+    } else {
+      flushList();
+      if (line.trim()) blocks.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  flushList();
+  return blocks.join("");
+}
+
 function addMessage(role, text = "") {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
@@ -84,7 +117,7 @@ async function ask(question) {
         const event = JSON.parse(chunk.slice(6));
         if (event.type === "token") {
           answer += event.text;
-          botEl.textContent = answer;
+          botEl.innerHTML = renderMarkdown(answer);
         } else if (event.type === "retrieval") {
           addRetrievalDetails(event.docs);
         } else if (event.type === "sources") {
