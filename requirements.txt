@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+anthropic
+chromadb
+sentence-transformers
+rank-bm25
+slowapi
+pydantic-settings
