@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chrono24-FAQ-Chatbot — Portfolio-Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="chat">
+    <header>
+      <h1>Chrono24-FAQ-Chatbot</h1>
+      <p class="subtitle">Stell eine Frage zu Kauf, Verkauf, Käuferschutz oder Versand.</p>
+    </header>
+    <div id="messages" class="messages"></div>
+    <div id="examples" class="examples">
+      <button class="example">Wie funktioniert der Käuferschutz?</button>
+      <button class="example">Was kostet der Verkauf einer Uhr?</button>
+      <button class="example">Wie läuft der Versand ab?</button>
+      <button class="example">Was ist der Trusted Checkout?</button>
+    </div>
+    <form id="form" class="input-row">
+      <input id="input" type="text" maxlength="500" autocomplete="off"
+             placeholder="Deine Frage …" required>
+      <button type="submit" id="send">Senden</button>
+    </form>
+    <footer>
+      Inoffizielles Portfolio-Projekt, nicht mit Chrono24 verbunden. Antworten ohne
+      Gewähr. Quelle: öffentliche Hilfeseiten von chrono24.de.
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
