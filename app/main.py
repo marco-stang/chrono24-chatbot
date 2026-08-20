@@ -23,6 +23,7 @@ from app.retrieval import Retriever
 logger = logging.getLogger("chrono24-chatbot")
 
 MAX_QUESTION_CHARS = 500
+MAX_MESSAGE_CHARS = 4000
 MAX_HISTORY_MESSAGES = 20
 HISTORY_TURNS_FOR_LLM = 6
 NOT_FOUND_ANSWER = "Dazu finde ich nichts in den Chrono24-Hilfeseiten."
@@ -30,7 +31,7 @@ NOT_FOUND_ANSWER = "Dazu finde ich nichts in den Chrono24-Hilfeseiten."
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
 
 
 class ChatRequest(BaseModel):
@@ -41,6 +42,8 @@ class ChatRequest(BaseModel):
     def last_message_must_be_user(cls, v: list[ChatMessage]) -> list[ChatMessage]:
         if v[-1].role != "user":
             raise ValueError("letzte Nachricht muss vom Nutzer sein")
+        if len(v[-1].content) > MAX_QUESTION_CHARS:
+            raise ValueError(f"Frage länger als {MAX_QUESTION_CHARS} Zeichen")
         return v
 
 
@@ -58,6 +61,10 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
     # Fail fast: ohne Index wirft Retriever() beim Start (statt leerer Antworten).
     app.state.retriever = retriever or Retriever(settings.index_dir, settings.corpus_path)
     app.state.budget = budget or TokenBudget(settings.budget_db, settings.daily_token_budget)
+
+    if llm_client is None and not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY ist nicht gesetzt — Service startet nicht")
+
     app.state.answer_fn = answer_fn or llm.stream_answer
     app.state.rewrite_fn = rewrite_fn or llm.rewrite_query
     app.state.llm_client = llm_client
@@ -101,7 +108,11 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
                 yield sse({"type": "error",
                            "message": "Antwort gerade nicht möglich, versuch es gleich nochmal."})
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     static_dir = Path("static")
     if static_dir.is_dir():

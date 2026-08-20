@@ -1,7 +1,9 @@
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.guards import TokenBudget
 from app.main import create_app
 from app.retrieval import RetrievedDoc
@@ -52,6 +54,8 @@ def test_chat_streams_tokens_sources_done(tmp_path):
     response = make_client(tmp_path, [DOC]).post("/api/chat", json={"messages": [
         {"role": "user", "content": "Wie funktioniert der Käuferschutz?"}]})
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
     events = parse_sse(response.text)
     types = [e["type"] for e in events]
     assert types == ["retrieval", "token", "token", "sources", "done"]
@@ -92,3 +96,47 @@ def test_chat_validates_input(tmp_path):
     assert client.post("/api/chat", json={"messages": too_many}).status_code == 422
     assert client.post("/api/chat", json={"messages": [
         {"role": "assistant", "content": "hi"}]}).status_code == 422
+
+
+def test_chat_accepts_long_assistant_history(tmp_path):
+    """Regression: der Frontend schickt volle Bot-Antworten (oft > 500 Zeichen)
+    als Verlauf zurück — MAX_QUESTION_CHARS darf nur für die letzte
+    Nutzer-Nachricht gelten, nicht für den gesamten Verlauf."""
+    long_answer = "a" * 1500
+    response = make_client(tmp_path, [DOC]).post("/api/chat", json={"messages": [
+        {"role": "user", "content": "Erste Frage?"},
+        {"role": "assistant", "content": long_answer},
+        {"role": "user", "content": "Zweite Frage?"},
+    ]})
+    assert response.status_code == 200
+
+
+def test_chat_rejects_message_over_max_message_chars(tmp_path):
+    client = make_client(tmp_path, [DOC])
+    response = client.post("/api/chat", json={"messages": [
+        {"role": "user", "content": "Erste Frage?"},
+        {"role": "assistant", "content": "a" * 4001},
+        {"role": "user", "content": "Zweite Frage?"},
+    ]})
+    assert response.status_code == 422
+
+
+def test_chat_rate_limits_after_ten_requests_per_minute(tmp_path):
+    # Hohes Budget, damit ausschließlich das Rate-Limit (nicht das Tagesbudget) greift.
+    budget = TokenBudget(tmp_path / "b6.sqlite3", daily_limit=1_000_000)
+    client = make_client(tmp_path, [DOC], budget=budget)
+    for _ in range(10):
+        response = client.post("/api/chat", json={"messages": [
+            {"role": "user", "content": "Käuferschutz?"}]})
+        assert response.status_code == 200
+    response = client.post("/api/chat", json={"messages": [
+        {"role": "user", "content": "Käuferschutz?"}]})
+    assert response.status_code == 429
+
+
+def test_create_app_raises_without_api_key_and_no_client(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        create_app(retriever=FakeRetriever([]),
+                    budget=TokenBudget(tmp_path / "b5.sqlite3", daily_limit=100),
+                    answer_fn=fake_answer_fn, rewrite_fn=fake_rewrite_fn, llm_client=None)
