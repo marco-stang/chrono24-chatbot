@@ -7,6 +7,13 @@ from pathlib import Path
 QUESTIONS_PATH = Path("eval/questions.json")
 
 
+def _questions_path(argv: list[str]) -> Path:
+    """Liest optionales --questions PATH aus argv, sonst Default-Tuning-Set."""
+    if "--questions" in argv:
+        return Path(argv[argv.index("--questions") + 1])
+    return QUESTIONS_PATH
+
+
 def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, list[dict]]:
     misses = []
     hits = 0
@@ -47,7 +54,7 @@ if __name__ == "__main__":
     from app.config import settings
     from app.retrieval import Retriever
 
-    questions = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    questions = json.loads(_questions_path(sys.argv).read_text(encoding="utf-8"))
     if "--with-rewrite" in sys.argv:
         questions = _rewrite_questions(questions)
     retriever = Retriever(settings.index_dir, settings.corpus_path)

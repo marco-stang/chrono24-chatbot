@@ -1,5 +1,7 @@
+from pathlib import Path
+
 from app.retrieval import RetrievedDoc
-from eval.run_eval import hit_rate_at_k
+from eval.run_eval import QUESTIONS_PATH, _questions_path, hit_rate_at_k
 
 
 class StubRetriever:
@@ -22,3 +24,12 @@ def test_hit_rate_counts_hits_in_top_k():
     assert rate == 0.5
     assert misses[0]["question"] == "F2"
     assert misses[0]["got"] == ["faq-0009"]
+
+
+def test_questions_path_defaults_to_tuning_set():
+    assert _questions_path([]) == QUESTIONS_PATH
+
+
+def test_questions_path_uses_custom_flag():
+    assert _questions_path(["--questions", "eval/questions_holdout.json"]) == \
+        Path("eval/questions_holdout.json")

@@ -58,6 +58,19 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | + Near-Duplicate-Merge der Seiten-Chunks (−5 Docs) | 73 % (24/33) |
 | + Cross-Encoder-Reranker (mmarco-mMiniLMv2) über die RRF-Top-10 | **88 % (29/33)** |
 | + Query-Übersetzung nicht-deutscher Fragen vor BM25 | 88 % (29/33) |
+| A: `TOP_K_CANDIDATES` 10 → 25 (mehr Kandidaten fürs Reranking) | 88 % (29/33) |
+| B: FAQ-Embedding auf Frage+Antwort statt nur Frage umgestellt | 82 % (27/33) |
+| A+B kombiniert | 88 % (29/33) |
+| **Gewinner: Status quo** (`TOP_K_CANDIDATES=10`, FAQ-Embedding = Frage) | **88 % (29/33)** |
+
+A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
+anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
+mehr Rechenaufwand (2,5× mehr Kandidaten fürs Reranking). B verschlechtert
+sich sogar: die Antwort im Embedding verwässert das gezielte
+Frage-auf-Frage-Matching, das oben als Designentscheidung begründet ist.
+Bei Gleichstand gewinnt laut Entscheidungsregel die einfachste Option — das
+ist hier der unveränderte Status quo, also blieb Code und Index exakt wie
+vor dem Experiment.
 
 Der Dedupe-Schritt kostet solo einen BM25-Randfall, verhindert aber, dass
 fast-identische Chunks die Top-5 verstopfen — zusammen mit dem Reranker
@@ -68,6 +81,19 @@ robust, weil BM25 sonst am deutschen Korpus vorbeiläuft. Die 4
 verbleibenden Misses sind diagnostizierte harte Fälle (mehrdeutige
 Zuordnung, z. B. „Certified" mit vielen nahen Kandidaten) — keine
 geschönten Fragen, keine kaputte Konfidenzschwelle.
+
+### Held-out-Validierung
+
+Alle Zahlen oben stammen vom selben 33-Fragen-Set, das auch für jede
+Tuning-Entscheidung genutzt wurde — das Risiko, unbewusst auf dieses Set hin
+zu optimieren, ist real. Als Gegenprobe gibt es `eval/questions_holdout.json`:
+15 neue, nie fürs Tuning verwendete Fragen zu Dokumenten, die im
+Tuning-Set nicht als Ziel vorkommen (11 FAQ-, 4 Seiten-Chunk-Ziele, 2
+englisch), einmalig gegen die finale Konfiguration gemessen:
+**87 % (13/15)**. Das liegt nur einen Punkt unter der Tuning-Zahl (88 %) —
+kein Anzeichen für Eval-Set-Overfitting, weil ein System, das nur auf die
+33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich stärker
+einbrechen würde.
 
 ### Antwortqualität (LLM-as-Judge)
 
