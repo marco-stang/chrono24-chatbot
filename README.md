@@ -69,6 +69,40 @@ verbleibenden Misses sind diagnostizierte harte Fälle (mehrdeutige
 Zuordnung, z. B. „Certified" mit vielen nahen Kandidaten) — keine
 geschönten Fragen, keine kaputte Konfidenzschwelle.
 
+### Antwortqualität (LLM-as-Judge)
+
+Hit-Rate misst nur, ob der richtige Kontext gefunden wird — nicht, ob die
+Antwort ihn auch korrekt nutzt. Dafür läuft `eval/judge.py` die komplette
+Live-Pipeline (Query-Rewrite → Retrieval → Antwort-Streaming) für alle 33
+Testfragen durch und lässt einen zweiten Haiku-Call die Antwort anhand des
+tatsächlich gesehenen Kontexts bewerten: `faithful` (sind alle
+Tatsachenaussagen belegt?) und `answered` (voll/teilweise/nein/verweigert).
+
+Ergebnis des Laufs vom 21.08.2026 (33/33 Fragen, Rohdaten in
+`eval/judge_results.json`):
+
+| Metrik | Wert |
+|---|---|
+| Faithful-Rate | 100 % (33/33) |
+| answered: voll | 27 |
+| answered: teilweise | 4 |
+| answered: verweigert | 2 |
+| answered: nein | 0 |
+
+Alle 4 „teilweise"-Fälle sind treu, aber unvollständig — der Kontext deckt
+nur einen Teilaspekt der Frage ab (z. B. Rückgaberecht als Käufer wird
+erklärt, Rückgabe durch den Verkäufer selbst fehlt im Kontext). Beide
+„verweigert"-Fälle sind laut Judge korrekt: der Kontext liefert wirklich
+keine Antwort auf die konkret gestellte Frage, der Bot lehnt ehrlich ab
+statt zu spekulieren.
+
+Ehrlicher Hinweis zur Methodik: Der Judge ist derselbe Modelltyp
+(`claude-haiku-4-5`) wie der Chatbot selbst — gleiche Modellfamilie, damit
+besteht eine milde Bias-Gefahr (der Judge könnte Fehler des Bots
+systematisch übersehen, die ein anderes Modell auffangen würde). Für ein
+belastbareres Signal wäre ein stärkeres oder anderes Modell als Judge
+vorzuziehen; hier ist es eine bewusste Kostenentscheidung fürs Demo-Projekt.
+
 ## Scraping-Ethik
 
 `robots.txt` von chrono24.de wurde vor dem Scrape-Lauf geprüft: für
