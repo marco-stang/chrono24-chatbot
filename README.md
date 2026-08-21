@@ -180,6 +180,32 @@ systematisch übersehen, die ein anderes Modell auffangen würde). Für ein
 belastbareres Signal wäre ein stärkeres oder anderes Modell als Judge
 vorzuziehen; hier ist es eine bewusste Kostenentscheidung fürs Demo-Projekt.
 
+### Gegenprobe mit Ragas
+
+Gleiche Messung, zweites Werkzeug: [Ragas](https://github.com/explodinggradients/ragas)
+ist das verbreitetste Open-Source-Framework für RAG-Evaluation. Seine
+Faithfulness-Metrik misst feiner als der eigene Judge — sie zerlegt jede
+Antwort in Einzelaussagen und liefert pro Antwort den **Anteil** der durch
+den Kontext gedeckten Aussagen (0–1), statt eines Ja/Nein pro Antwort.
+Einmalig über alle 33 Testfragen gelaufen (frische Pipeline-Antworten nach
+der Synonym-Expansion), mit zwei unterschiedlich starken Judge-Modellen:
+
+| Judge-Modell | Faithfulness (Mittel) | Antworten mit 1.0 | Antworten ≥ 0.8 |
+|---|---|---|---|
+| Claude Haiku 4.5 | 0.96 | 76 % | 94 % |
+| Claude Sonnet 4.5 (stärker) | 0.93 | 70 % | 88 % |
+
+Einfach gelesen: Von 100 Einzelaussagen einer Antwort sind im Schnitt 93–96
+direkt im gezeigten Kontext belegt. Das widerspricht der 100-%-Zahl des
+eigenen Judges nicht — der urteilt binär pro ganzer Antwort und toleriert
+Übergangs- und Zusammenfassungssätze, die Ragas auf Aussagen-Ebene als
+„nicht direkt gedeckt" zählt. Erwartbar und beruhigend zugleich: der
+stärkere Judge ist strenger (0.93 statt 0.96) und findet mehr Grenzfälle —
+ein Hinweis, dass die eigene 100-%-Zahl die freundlichste Lesart ist, nicht
+die einzige. Rohdaten: `eval/ragas_results_haiku.json` und
+`eval/ragas_results_sonnet.json`; Ragas lief bewusst in einem separaten
+venv und ist keine Projekt-Abhängigkeit.
+
 ## Laufzeit-Faithfulness-Check (deterministisch)
 
 Der LLM-Judge misst offline; zur Laufzeit prüfte lange nichts, ob eine
