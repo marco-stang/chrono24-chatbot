@@ -145,12 +145,12 @@ function briefingRow(label, text, check, lines) {
   return row;
 }
 
-function addBriefingCard(result) {
+function addBriefingCard(result, target = "Support") {
   const card = document.createElement("div");
   card.className = "briefing";
   const head = document.createElement("div");
   head.className = "briefing-head";
-  head.textContent = `Übergabe-Briefing · ${STATUS_LABEL[result.status]}`;
+  head.textContent = `Übergabe-Briefing · für: ${target} · ${STATUS_LABEL[result.status]}`;
   card.appendChild(head);
 
   if (result.status === "rejected") {
@@ -160,9 +160,17 @@ function addBriefingCard(result) {
       "Aussage(n) abgelehnt. Der Roh-Verlauf würde übergeben. " +
       "(Demo: es findet keine echte Weiterleitung statt.)";
     card.appendChild(p);
-    messagesEl.appendChild(card);
+    scenarioContainer().appendChild(card);
     return;
   }
+
+  // Der Mehrwert in einem Satz — wie im Schwesterprojekt.
+  const merit = document.createElement("p");
+  merit.className = "merit";
+  merit.textContent =
+    `Statt ${result.lines.length} Nachrichten zu lesen, bekommt der ` +
+    "übernehmende Agent dieses Briefing — jede Aussage mit geprüfter Quelle.";
+  card.appendChild(merit);
 
   // validation-Reihenfolge = situation, history, sentiment-quote, open_question, claims
   const v = result.validation;
@@ -180,7 +188,7 @@ function addBriefingCard(result) {
   legend.textContent =
     "✅ Wortlaut deckt sich mit dem Chat · 🟡 paraphrasiert · 🔴 nicht belegt · (Demo: keine echte Weiterleitung)";
   card.appendChild(legend);
-  messagesEl.appendChild(card);
+  scenarioContainer().appendChild(card);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -199,10 +207,12 @@ async function requestHandover() {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      addMessage("bot", body.detail || "Übergabe gerade nicht möglich — bitte später erneut versuchen.");
+      // detail ist bei 422 ein Array von Objekten — nur echte Strings anzeigen.
+      const detail = typeof body.detail === "string" ? body.detail : null;
+      addMessage("bot", detail || "Übergabe gerade nicht möglich — bitte später erneut versuchen.");
       return;
     }
-    addBriefingCard(await response.json());
+    addBriefingCard(await response.json(), pendingHandoverTarget || "Support");
   } catch {
     addMessage("bot", "Verbindungsfehler bei der Übergabe — bitte gleich nochmal versuchen.");
   } finally {
@@ -227,48 +237,100 @@ function offerHandover() {
   messagesEl.appendChild(div);
 }
 
-// --- Demo-Szenarien: gestellte Verläufe, damit das Handover-Briefing ohne
-// Tipparbeit vorführbar ist. Das Briefing selbst entsteht immer live. ---
+// --- Demo-Szenarien: drei gestellte Sackgassen-Verläufe in Akten. Akt 1 zeigt
+// jeweils den funktionierenden Bot, danach läuft das Gespräch in die Sackgasse —
+// die Übergabe mit live geprüftem Briefing ist die Auflösung. Max. 12
+// Nachrichten pro Szenario, damit die M-Badges der Server-Nummerierung
+// entsprechen (der Endpoint trimmt auf die letzten 12). ---
+const ACTOR_LABEL = { user: "Kunde", assistant: "Bot", agent: "Support" };
+const ROLE_CLASS = { user: "user", assistant: "bot", agent: "agent" };
+
 const SCENARIOS = [
   {
     label: "🎬 Uhr nicht angekommen",
-    messages: [
-      { role: "user", content: "Ich habe vor zwei Wochen eine Omega Speedmaster bei einem Händler gekauft und sie ist immer noch nicht angekommen." },
-      { role: "assistant", content: "Der Chrono24 Käuferschutz sichert deine Zahlung ab — das Geld liegt beim Treuhandservice, bis du die Uhr erhalten hast [1]. Bei Problemen kontaktiere innerhalb von 14 Tagen nach Erhalt der Lieferung das Support-Team [2]." },
-      { role: "user", content: "Der Händler antwortet nicht mehr auf meine Nachrichten. Was kann ich jetzt konkret tun?" },
-      { role: "assistant", content: "Wende dich direkt an das Chrono24 Support-Team — der Käuferschutz greift, wenn die Bestellung über Chrono24 abgewickelt wurde [1]. Deine Zahlung bleibt geschützt, bis der Fall geklärt ist [2]." },
+    acts: [
+      { title: "Der Bot funktioniert", messages: [
+        { role: "user", content: "Ich habe vor zwei Wochen eine Omega Speedmaster bei einem Händler gekauft. Wie lange dauert der Versand normalerweise?" },
+        { role: "assistant", content: "Der Verkäufer versendet in der Regel innerhalb weniger Werktage, der Versand ist versichert [1]. Über den Sendungsstatus wirst du per E-Mail informiert [2]." },
+      ] },
+      { title: "Es wird konkret — die FAQ reicht nicht mehr", messages: [
+        { role: "user", content: "Es sind jetzt aber schon 14 Tage. Bestellnummer C24-88123. Der Händler antwortet nicht auf meine Nachrichten." },
+        { role: "assistant", content: "Der Käuferschutz sichert deine Zahlung ab — das Geld liegt beim Treuhandservice, bis du die Uhr erhalten hast [1]. Bei Problemen kontaktiere das Support-Team [2]." },
+        { role: "user", content: "Das habe ich alles gelesen. Ich will wissen, was jetzt mit MEINER Bestellung passiert." },
+        { role: "assistant", content: "Auf einzelne Bestellungen habe ich keinen Zugriff — der Käuferschutz gilt, solange die Zahlung über Chrono24 abgewickelt wurde [1]." },
+      ] },
+      { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
+        { role: "user", content: "Kannst du prüfen, ob mein Geld noch beim Treuhandservice liegt, und den Händler mahnen?" },
+        { role: "assistant", content: NOT_FOUND_TEXT },
+      ] },
     ],
   },
   {
-    label: "🎬 Bot-Sackgasse",
-    messages: [
-      { role: "user", content: "Kann ich meine Uhr über Chrono24 gegen Diebstahl versichern lassen?" },
-      { role: "assistant", content: NOT_FOUND_TEXT },
+    label: "🎬 Zollfrage aus der Schweiz",
+    acts: [
+      { title: "Der Bot funktioniert", messages: [
+        { role: "user", content: "Ich kaufe aus der Schweiz. Ist der Versand dorthin möglich?" },
+        { role: "assistant", content: "Internationaler Versand ist möglich und versichert [1]. Je nach Land können Zollgebühren anfallen [2]." },
+      ] },
+      { title: "Die Rückgabe wird kompliziert", messages: [
+        { role: "user", content: "Die Uhr passt mir nicht, ich will sie zurückgeben. Wer zahlt den Rückversand in die EU?" },
+        { role: "assistant", content: "Innerhalb der 14-tägigen Widerrufsfrist kannst du den Kauf rückgängig machen [1]. Die Details zum Rückversand klärst du mit dem Verkäufer [2]." },
+        { role: "user", content: "Und die Schweizer Zollgebühren, die ich beim Import schon bezahlt habe — bekomme ich die zurück?" },
+        { role: "assistant", content: "In den Hilfeseiten steht nur, dass Zollgebühren anfallen können [2] — zu deren Erstattung finde ich dort keine Angaben." },
+      ] },
+      { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
+        { role: "user", content: "Welches Formular brauche ich beim Schweizer Zoll für die Rückerstattung, und wen kontaktiere ich dort?" },
+        { role: "assistant", content: NOT_FOUND_TEXT },
+      ] },
+    ],
+  },
+  {
+    label: "🎬 Widersprüchliche Angaben",
+    acts: [
+      { title: "Der Bot funktioniert", messages: [
+        { role: "user", content: "Wie kann ich bei Chrono24 bezahlen?" },
+        { role: "assistant", content: "Per Banküberweisung oder Kreditkarte über den Treuhandservice [1] — das Geld wird erst nach Erhalt der Uhr an den Verkäufer freigegeben [2]." },
+      ] },
+      { title: "Die Angaben widersprechen sich", messages: [
+        { role: "user", content: "Ich habe vor zwei Wochen per Überweisung bezahlt, aber der Status zeigt immer noch 'Zahlung ausstehend'." },
+        { role: "assistant", content: "Banküberweisungen brauchen einige Werktage, bis sie beim Treuhandservice eingehen [1]." },
+        { role: "user", content: "Moment — es war doch letzte Woche mit Kreditkarte, glaube ich. Auf jeden Fall ist das Geld weg." },
+        { role: "assistant", content: "Kreditkartenzahlungen werden sofort verbucht [1]. Den konkreten Zahlungsstatus deiner Bestellung kann ich nicht einsehen." },
+      ] },
+      { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
+        { role: "user", content: "Egal wie — wo ist mein Geld? Kann das bitte jemand prüfen?" },
+        { role: "assistant", content: NOT_FOUND_TEXT },
+      ] },
+      { title: "Tier 1 übernimmt — und muss selbst eskalieren", handoverTarget: "Tier-2-Support", messages: [
+        { role: "agent", content: "Hallo, hier Tier-1-Support. Ich sehe zwei unterschiedliche Angaben: Überweisung vor zwei Wochen und Kreditkarte letzte Woche. Welche stimmt?" },
+        { role: "user", content: "Ich bin nicht sicher — vielleicht beides? Mein Mann hat eventuell auch noch etwas überwiesen." },
+        { role: "agent", content: "Das kann ich auf Tier 1 nicht auflösen, dafür braucht es die Buchhaltung mit Kontoeinsicht." },
+        { role: "user", content: "Dann gebt es bitte weiter — ich will einfach mein Geld zurück." },
+      ] },
     ],
   },
 ];
 
-// Durchklickbar wie die Akten im Schwesterprojekt: pro Klick erscheint das
-// nächste Nachrichtenpaar, am Ende die Übergabe-Aufforderung.
+// Durchklickbar in Akten wie im Schwesterprojekt, an einer vertikalen
+// Zeitachse: Akte sind ●-Stationen, Übergaben ◆-Meilensteine.
 let activeScenario = null;
-let scenarioStep = 0;
+let scenarioStep = 0;       // Anzahl bereits gezeigter Akte
+let scenarioMsgCount = 0;   // fortlaufender M-Index über alle Akte
+let pendingHandoverTarget = null;
+
+function scenarioContainer() {
+  return (activeScenario && document.getElementById("scenario-timeline")) || messagesEl;
+}
 
 function addScenarioNote() {
   const div = document.createElement("div");
   div.className = "scenario-note";
   div.textContent =
-    "🎬 Gestelltes Szenario — klick dich Schritt für Schritt durch den " +
-    "Verlauf. Am Ende übergibst du an den Support: das Briefing entsteht " +
-    "live und jede Aussage wird gegen den Verlauf geprüft.";
+    "🎬 Gestelltes Szenario in Akten — Akt 1 zeigt den funktionierenden Bot, " +
+    "dann läuft das Gespräch in die Sackgasse. An jedem ◆-Meilenstein " +
+    "übergibst du: das Briefing entsteht live und jede Aussage wird gegen " +
+    "den Verlauf geprüft.";
   messagesEl.appendChild(div);
-}
-
-function scenarioSteps(scenario) {
-  const steps = [];
-  for (let i = 0; i < scenario.messages.length; i += 2) {
-    steps.push(scenario.messages.slice(i, i + 2));
-  }
-  return steps;
 }
 
 function removeScenarioNav() {
@@ -276,32 +338,52 @@ function removeScenarioNav() {
   if (nav) nav.remove();
 }
 
-function renderScenarioMessages(msgs, startIdx) {
-  msgs.forEach((m, j) => {
+function renderActMessages(messages) {
+  const container = scenarioContainer();
+  for (const m of messages) {
     history.push(m);
-    const el = addMessage(m.role === "user" ? "user" : "bot", m.content);
+    const el = addMessage(ROLE_CLASS[m.role], m.content);
+    container.appendChild(el);
+    scenarioMsgCount++;
     // Sichtbare Zeilen-ID wie in der Akte des Schwesterprojekts — deckungs-
     // gleich mit den M-IDs, die der Server im Briefing zitiert.
     const badge = document.createElement("span");
     badge.className = "line-badge";
     badge.textContent =
-      `M${String(startIdx + j + 1).padStart(2, "0")} · ${m.role === "user" ? "Kunde" : "Bot"}`;
+      `M${String(scenarioMsgCount).padStart(2, "0")} · ${ACTOR_LABEL[m.role]}`;
     el.prepend(badge);
-  });
+  }
+}
+
+function tlMilestone(target) {
+  pendingHandoverTarget = target;
+  const div = document.createElement("div");
+  div.className = "tl-milestone";
+  div.append(`◆ Übergabe → ${target} — `);
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "handover-link";
+  link.textContent = "jetzt übergeben ▸";
+  link.addEventListener("click", requestHandover);
+  div.appendChild(link);
+  handoverBtn.hidden = false;
+  handoverBtn.classList.add("pulse");
+  setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
+  return div;
 }
 
 function renderScenarioNav() {
   removeScenarioNav();
-  const steps = scenarioSteps(activeScenario);
+  const total = activeScenario.acts.length;
   const nav = document.createElement("div");
   nav.id = "scenario-nav";
   nav.className = "scenario-nav";
-  nav.append(`Schritt ${scenarioStep} von ${steps.length} · `);
+  nav.append(`Akt ${scenarioStep} von ${total} · `);
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "handover-link";
-  if (scenarioStep < steps.length) {
-    btn.textContent = "Nächster Schritt ▸";
+  if (scenarioStep < total) {
+    btn.textContent = "Nächster Akt ▸";
     btn.addEventListener("click", advanceScenario);
   } else {
     btn.textContent = "↺ Von vorn";
@@ -314,17 +396,15 @@ function renderScenarioNav() {
 }
 
 function advanceScenario() {
-  const steps = scenarioSteps(activeScenario);
-  const shown = steps.slice(0, scenarioStep).reduce((n, s) => n + s.length, 0);
-  renderScenarioMessages(steps[scenarioStep], shown);
+  const act = activeScenario.acts[scenarioStep];
+  const container = scenarioContainer();
+  const station = document.createElement("div");
+  station.className = "tl-station";
+  station.textContent = `● Akt ${scenarioStep + 1} · ${act.title}`;
+  container.appendChild(station);
+  renderActMessages(act.messages);
+  if (act.handoverTarget) container.appendChild(tlMilestone(act.handoverTarget));
   scenarioStep++;
-  if (scenarioStep >= steps.length) {
-    handoverBtn.hidden = false;
-    const last = activeScenario.messages[activeScenario.messages.length - 1];
-    if (last.content.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
-    handoverBtn.classList.add("pulse");
-    setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
-  }
   renderScenarioNav();
 }
 
@@ -334,7 +414,13 @@ function loadScenario(scenario) {
   examplesEl.style.display = "none";
   activeScenario = scenario;
   scenarioStep = 0;
+  scenarioMsgCount = 0;
+  pendingHandoverTarget = null;
   addScenarioNote();
+  const timeline = document.createElement("div");
+  timeline.id = "scenario-timeline";
+  timeline.className = "timeline";
+  messagesEl.appendChild(timeline);
   advanceScenario();
 }
 
@@ -357,6 +443,7 @@ async function ask(question) {
   // korrekt, weil neue Nachrichten hinten angehängt werden.
   removeScenarioNav();
   activeScenario = null;
+  pendingHandoverTarget = null;
   input.value = "";
   sendBtn.disabled = true;
   examplesEl.style.display = "none";
@@ -371,7 +458,11 @@ async function ask(question) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history.slice(-20) }),
+      // Support-Zeilen aus Szenarien herausfiltern — der Chat-Endpoint
+      // kennt nur user/assistant, der Handover-Endpoint alle drei Rollen.
+      body: JSON.stringify({
+        messages: history.filter((m) => m.role !== "agent").slice(-20),
+      }),
     });
     if (response.status === 429) {
       const body = await response.json().catch(() => ({}));

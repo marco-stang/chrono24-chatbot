@@ -83,6 +83,18 @@ header h1 { font-size: 1.3rem; }
   font-family: monospace; margin-bottom: 0.2rem; }
 .scenario-nav { font-size: 0.85rem; color: var(--muted); align-self: center;
   padding: 0.2rem 0; }
+
+/* Vertikale Zeitachse: Akte als ●-Stationen, Übergaben als ◆-Meilensteine. */
+.timeline { display: flex; flex-direction: column; gap: 0.5rem;
+  border-left: 2px solid var(--muted); margin-left: 0.4rem;
+  padding-left: 0.9rem; }
+.tl-station { font-weight: 600; font-size: 0.85rem; color: var(--text);
+  margin: 0.4rem 0 0.1rem -1.32rem; }
+.tl-milestone { font-size: 0.85rem; color: var(--accent);
+  margin: 0.3rem 0 0.3rem -1.32rem; }
+.msg.agent { background: #2ea04333; align-self: flex-start; white-space: normal; }
+.briefing .merit { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--muted);
+  font-style: italic; }
 .briefing .belege { font-size: 0.78rem; color: var(--muted); margin: 0.2rem 0 0.3rem; }
 .briefing .belege summary { cursor: pointer; color: var(--accent); }
 .briefing .belege blockquote { margin: 0.3rem 0 0.3rem 0.8rem; padding-left: 0.6rem;
