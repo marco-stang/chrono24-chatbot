@@ -6,6 +6,9 @@ const examplesEl = document.getElementById("examples");
 
 const history = [];
 
+const MOTION_OK = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function escapeHtml(text) {
   return text
     .replaceAll("&", "&amp;")
@@ -120,10 +123,16 @@ const STATUS_LABEL = { ok: "✅ geprüft", rejected: "⛔ abgelehnt" };
 function briefingRow(label, text, check, lines) {
   const row = document.createElement("div");
   row.className = "briefing-row";
-  const icon = check ? STATUS_ICON[check.status] : "";
+  const icon = document.createElement("span");
+  icon.className = "status-icon";
+  icon.textContent = check ? STATUS_ICON[check.status] : "";
   const strong = document.createElement("strong");
   strong.textContent = label + ": ";
-  row.append(`${icon} `, strong, text);
+  // Icon in fester Spalte, Text daneben — Umbruchzeilen bleiben bündig.
+  const body = document.createElement("div");
+  body.className = "row-body";
+  body.append(strong, text);
+  row.append(icon, body);
   if (check && check.sources.length) {
     // "Beleg prüfen" wie im Schwesterprojekt: wörtliches Zeilenzitat + Score.
     const details = document.createElement("details");
@@ -141,18 +150,23 @@ function briefingRow(label, text, check, lines) {
         : `${id} — Zeile nicht gefunden`;
       details.appendChild(quote);
     }
-    row.appendChild(details);
+    body.appendChild(details);
   }
   return row;
 }
 
-function addBriefingCard(result, target = "Support") {
+// Die Prüfung als Schauspiel: Zeilen erscheinen einzeln, jede läuft kurz als
+// "wird geprüft …" mit Spinner, dann klappt das Ampel-Ergebnis ein. Klick auf
+// die Karte (oder reduzierte Bewegung) überspringt die Inszenierung.
+async function addBriefingCard(result, target = "Support") {
   const card = document.createElement("div");
   card.className = "briefing";
   const head = document.createElement("div");
   head.className = "briefing-head";
   head.textContent = `Übergabe-Briefing · für: ${target} · ${STATUS_LABEL[result.status]}`;
   card.appendChild(head);
+  scenarioContainer().appendChild(card);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 
   if (result.status === "rejected") {
     const p = document.createElement("p");
@@ -161,9 +175,12 @@ function addBriefingCard(result, target = "Support") {
       "Aussage(n) abgelehnt. Der Roh-Verlauf würde übergeben. " +
       "(Demo: es findet keine echte Weiterleitung statt.)";
     card.appendChild(p);
-    scenarioContainer().appendChild(card);
     return;
   }
+
+  let skip = !MOTION_OK;
+  card.addEventListener("click", () => { skip = true; });
+  const pace = async (ms) => { if (!skip) await sleep(ms); };
 
   // Der Mehrwert in einem Satz — wie im Schwesterprojekt.
   const merit = document.createElement("p");
@@ -176,13 +193,31 @@ function addBriefingCard(result, target = "Support") {
   // validation-Reihenfolge = situation, history, sentiment-quote, open_question, claims
   const v = result.validation;
   const b = result.briefing;
-  card.appendChild(briefingRow("Situation", b.situation.text, v[0], result.lines));
-  card.appendChild(briefingRow("Verlauf", b.history.text, v[1], result.lines));
-  card.appendChild(briefingRow("Stimmung",
-    `${b.sentiment.label} — „${b.sentiment.quote}"`, v[2], result.lines));
-  card.appendChild(briefingRow("Offene Frage", b.open_question.text, v[3], result.lines));
+  const mainRows = [
+    briefingRow("Situation", b.situation.text, v[0], result.lines),
+    briefingRow("Verlauf", b.history.text, v[1], result.lines),
+    briefingRow("Stimmung",
+      `${b.sentiment.label} — „${b.sentiment.quote}"`, v[2], result.lines),
+    briefingRow("Offene Frage", b.open_question.text, v[3], result.lines),
+  ];
+  for (const row of mainRows) {
+    const icon = row.querySelector(".status-icon");
+    const belege = row.querySelector(".belege");
+    const finalIcon = icon.textContent;
+    icon.textContent = "";
+    icon.classList.add("loading");
+    if (belege) belege.hidden = true;
+    card.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    await pace(650);
+    icon.classList.remove("loading");
+    icon.textContent = finalIcon;
+    if (belege) belege.hidden = false;
+  }
+
   // Einzelaussagen eingeklappt — die Summenzeile zeigt, DASS geprüft wird,
   // die Detailtiefe gibt's erst auf Klick.
+  await pace(400);
   if (b.claims.length) {
     const counts = { PASS: 0, WEAK: 0, FAIL: 0 };
     for (const check of v.slice(4)) counts[check.status]++;
@@ -192,8 +227,9 @@ function addBriefingCard(result, target = "Support") {
     const parts = Object.entries(counts)
       .filter(([, n]) => n > 0)
       .map(([status, n]) => `${n} ${STATUS_ICON[status]}`);
+    const n = b.claims.length;
     claimsSummary.textContent =
-      `${b.claims.length} Aussagen automatisch gegengeprüft (${parts.join(" / ")})`;
+      `${n} Aussage${n === 1 ? "" : "n"} automatisch gegengeprüft (${parts.join(" / ")})`;
     claimsBox.appendChild(claimsSummary);
     b.claims.forEach((claim, i) => {
       claimsBox.appendChild(briefingRow("Aussage", claim.text, v[4 + i], result.lines));
@@ -205,7 +241,6 @@ function addBriefingCard(result, target = "Support") {
   legend.textContent =
     "✅ wörtlich belegt · 🟡 sinngemäß · 🔴 nicht belegt · (Demo: keine echte Weiterleitung)";
   card.appendChild(legend);
-  scenarioContainer().appendChild(card);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -240,7 +275,7 @@ async function requestHandover(trigger) {
       addMessage("bot", detail || fallback);
       return;
     }
-    addBriefingCard(await response.json(), pendingHandoverTarget || "Support");
+    await addBriefingCard(await response.json(), pendingHandoverTarget || "Support");
     succeeded = true;
     if (activeScenario && pendingResolution) renderResolution();
   } catch {
@@ -434,6 +469,19 @@ function addScenarioNote() {
   chips.className = "lane-chips";
   for (const lane of lanes) chips.appendChild(laneChip(lane));
   div.appendChild(chips);
+  // Kino-Modus: Fall läuft von selbst ab, inklusive Briefing am ◆.
+  const play = document.createElement("button");
+  play.type = "button";
+  play.className = "handover-link play-btn";
+  play.textContent = "▶ Automatisch abspielen";
+  play.addEventListener("click", () => {
+    if (autoplay) {
+      autoplay = false;
+    } else {
+      playScenario(activeScenario);
+    }
+  });
+  div.appendChild(play);
   messagesEl.appendChild(div);
 }
 
@@ -449,23 +497,26 @@ function speakerLane(role) {
   return null;
 }
 
+function renderOneMessage(m) {
+  history.push(m);
+  const lane = speakerLane(m.role);
+  const content = tlRow("message", lane);
+  const el = addMessage(ROLE_CLASS[m.role], m.content);
+  el.classList.add("appear");
+  if (m.role === "agent") el.classList.add(ownerLane);
+  content.appendChild(el);
+  scenarioMsgCount++;
+  // Sichtbare Zeilen-ID — deckungsgleich mit den M-IDs, die der Server im
+  // Briefing zitiert. Farbe folgt dem Sprecher.
+  const badge = document.createElement("span");
+  badge.className = `line-badge ${lane || "user"}`;
+  badge.textContent =
+    `M${String(scenarioMsgCount).padStart(2, "0")} · ${ACTOR_LABEL[m.role]}`;
+  el.prepend(badge);
+}
+
 function renderActMessages(messages) {
-  for (const m of messages) {
-    history.push(m);
-    const lane = speakerLane(m.role);
-    const content = tlRow("message", lane);
-    const el = addMessage(ROLE_CLASS[m.role], m.content);
-    if (m.role === "agent") el.classList.add(ownerLane);
-    content.appendChild(el);
-    scenarioMsgCount++;
-    // Sichtbare Zeilen-ID — deckungsgleich mit den M-IDs, die der Server im
-    // Briefing zitiert. Farbe folgt dem Sprecher.
-    const badge = document.createElement("span");
-    badge.className = `line-badge ${lane || "user"}`;
-    badge.textContent =
-      `M${String(scenarioMsgCount).padStart(2, "0")} · ${ACTOR_LABEL[m.role]}`;
-    el.prepend(badge);
-  }
+  for (const m of messages) renderOneMessage(m);
 }
 
 function renderResolution() {
@@ -510,6 +561,13 @@ function renderScenarioNav() {
   const nav = document.createElement("div");
   nav.id = "scenario-nav";
   nav.className = "scenario-nav";
+  if (autoplay) {
+    // Während des Kino-Modus keine klickbare Navigation — Stopp läuft über
+    // den Abspielen-Button in der Szenario-Notiz.
+    nav.append(`Akt ${scenarioStep} von ${total} · läuft ab …`);
+    messagesEl.appendChild(nav);
+    return;
+  }
   nav.append(`Akt ${scenarioStep} von ${total} · `);
   const btn = document.createElement("button");
   btn.type = "button";
@@ -541,7 +599,55 @@ function advanceScenario() {
   renderScenarioNav();
 }
 
-function loadScenario(scenario) {
+// --- Kino-Modus: Akte laufen zeitversetzt ab, Briefings lösen am ◆ von
+// selbst aus. Stopp (oder Tab-/Szenariowechsel) rendert den Rest des
+// laufenden Akts sofort fertig und gibt die Steuerung zurück. ---
+let autoplay = false;
+
+async function advanceScenarioAnimated(scenario) {
+  const stopped = () => !autoplay || activeScenario !== scenario;
+  const act = scenario.acts[scenarioStep];
+  const title = tlRow("act", null);
+  title.textContent = `Akt ${scenarioStep + 1} · ${act.title}`;
+  for (const m of act.messages) {
+    if (activeScenario !== scenario) return;
+    if (!stopped()) await sleep(MOTION_OK ? 900 : 400);
+    if (activeScenario !== scenario) return;
+    renderOneMessage(m);
+  }
+  const isLastAct = scenarioStep === scenario.acts.length - 1;
+  if (act.handoverTarget) {
+    tlMilestone(act.handoverTarget, isLastAct ? scenario.resolution : null);
+    if (!stopped()) {
+      await sleep(600);
+      if (!stopped()) {
+        const link = milestoneContent.querySelector(".handover-link");
+        await requestHandover(link);
+      }
+    }
+  }
+  scenarioStep++;
+  renderScenarioNav();
+}
+
+async function playScenario(scenario) {
+  if (autoplay || handoverInFlight || sendBtn.disabled || !scenario) return;
+  loadScenario(scenario, true);
+  autoplay = true;
+  const playBtn = document.querySelector(".play-btn");
+  if (playBtn) playBtn.textContent = "■ Stopp";
+  renderScenarioNav();
+  while (autoplay && activeScenario === scenario
+         && scenarioStep < scenario.acts.length) {
+    await advanceScenarioAnimated(scenario);
+  }
+  autoplay = false;
+  const btn = document.querySelector(".play-btn");
+  if (btn) btn.textContent = "▶ Automatisch abspielen";
+  if (activeScenario === scenario) renderScenarioNav();
+}
+
+function loadScenario(scenario, deferFirstAct = false) {
   messagesEl.replaceChildren();
   history.length = 0;
   examplesEl.style.display = "none";
@@ -566,7 +672,7 @@ function loadScenario(scenario) {
   timeline.className = "timeline";
   timeline.style.setProperty("--lane-count", lanes.length);
   messagesEl.appendChild(timeline);
-  advanceScenario();
+  if (!deferFirstAct) advanceScenario();
 }
 
 const scenariosEl = document.getElementById("scenarios");
@@ -608,6 +714,7 @@ const TAB_INTRO = {
 function switchTab(mode) {
   messagesEl.replaceChildren();
   history.length = 0;
+  autoplay = false;
   activeScenario = null;
   pendingHandoverTarget = null;
   pendingResolution = null;
@@ -631,6 +738,7 @@ async function ask(question) {
   // Eigene Frage beendet den geführten Szenario-Modus; die M-Badges bleiben
   // korrekt, weil neue Nachrichten hinten angehängt werden.
   removeScenarioNav();
+  autoplay = false;
   activeScenario = null;
   pendingHandoverTarget = null;
   pendingResolution = null;

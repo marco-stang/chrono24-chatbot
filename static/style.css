@@ -121,12 +121,13 @@ footer { border-top: 1px solid var(--border); padding-top: 0.6rem; }
   padding: 0.45rem 0.9rem;
 }
 .briefing > p, .briefing-row, .briefing .legend { margin: 0.35rem 0.9rem; }
-.briefing-row { padding-left: 1.2rem; text-indent: -1.2rem; }
+.briefing-row { display: flex; gap: 0.45rem; align-items: flex-start; }
+.briefing-row .row-body { flex: 1; min-width: 0; }
 .briefing .merit { font-size: 0.82rem; color: var(--muted); font-style: italic; }
 .briefing .legend { font-size: 0.75rem; color: var(--muted); padding-bottom: 0.5rem; }
 .briefing .belege {
   font-size: 0.78rem; color: var(--muted);
-  margin: 0.2rem 0 0.3rem; text-indent: 0;
+  margin: 0.2rem 0 0.3rem;
 }
 .briefing .belege summary { cursor: pointer; color: var(--green); }
 .briefing .claims { margin: 0.35rem 0.9rem 0.5rem; }
@@ -247,6 +248,14 @@ footer { border-top: 1px solid var(--border); padding-top: 0.6rem; }
 .milestone-label.t1 { color: var(--t1); }
 .milestone-label.t2 { color: var(--t2); }
 
+/* Kino-Modus und Briefing-Inszenierung */
+.msg.appear { animation: msg-in 0.3s ease-out; }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.play-btn { font-weight: 600; }
+.status-icon { display: inline-block; min-width: 1.1em; }
+
 .pulse { animation: handover-pulse 1s ease-in-out 3; }
 .loading::after {
   content: ""; display: inline-block; width: 0.75em; height: 0.75em;
@@ -259,7 +268,7 @@ footer { border-top: 1px solid var(--border); padding-top: 0.6rem; }
   50% { box-shadow: 0 0 0 4px #00654a55; border-color: var(--green); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pulse, .loading::after { animation: none; }
+  .pulse, .loading::after, .msg.appear { animation: none; }
 }
 
 .examples { display: flex; flex-wrap: wrap; gap: 0.5rem; }
