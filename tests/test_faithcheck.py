@@ -1,7 +1,7 @@
 """Tests für den deterministischen Faithfulness-Check (Token-Overlap)."""
 import pytest
 
-from app.faithcheck import check_answer, score_overlap, split_sentences
+from app.faithcheck import check_answer, score_overlap, split_sentences, validate_claims
 
 
 # --- Satz-Splitting ---
@@ -103,3 +103,58 @@ def test_multiple_citations_use_concatenated_sources():
     checks = check_answer(answer, DOCS)
     assert checks[0].sources == [1, 2]
     assert checks[0].status == "PASS"
+
+
+# --- validate_claims (Handover-Briefing) ---
+
+LINES = {"M01": "Meine Rolex Daytona ist nach zwei Wochen immer noch nicht angekommen.",
+         "M02": "Der Käuferschutz sichert deine Zahlung vollständig ab."}
+
+
+def test_claim_covered_by_cited_line_is_pass():
+    claims = [{"text": "Rolex Daytona ist nicht angekommen", "source_lines": ["M01"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "PASS"
+    assert check.score >= 0.5
+    assert check.sources == ["M01"]
+
+
+def test_claim_with_low_overlap_is_weak():
+    claims = [{"text": "Das Paket kommt nach Wochen nicht an",
+               "source_lines": ["M01"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "WEAK"
+    assert 0 < check.score < 0.5
+
+
+def test_claim_with_zero_overlap_is_fail():
+    claims = [{"text": "Bitcoin Kurs steigt enorm", "source_lines": ["M02"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "FAIL"
+    assert check.score == 0.0
+
+
+def test_claim_without_source_lines_is_fail():
+    claims = [{"text": "Rolex Daytona ist nicht angekommen", "source_lines": []}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "FAIL"
+
+
+def test_claim_with_unknown_line_id_is_fail():
+    claims = [{"text": "Rolex Daytona ist nicht angekommen", "source_lines": ["M99"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "FAIL"
+
+
+def test_tokenizer_ignores_line_id_tokens():
+    # "M01" im Claim-Text darf den Score nicht verfälschen (analog [n]-Marker).
+    claims = [{"text": "M01 Rolex Daytona ist nicht angekommen", "source_lines": ["M01"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "PASS"
+
+
+def test_claims_spanning_multiple_lines_concatenate_sources():
+    claims = [{"text": "Rolex nicht angekommen, Käuferschutz sichert Zahlung ab",
+               "source_lines": ["M01", "M02"]}]
+    [check] = validate_claims(claims, LINES)
+    assert check.status == "PASS"

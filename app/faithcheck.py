@@ -30,12 +30,14 @@ class SentenceCheck:
     text: str
     status: str  # "PASS" | "WEAK" | "FAIL"
     score: float
-    sources: list[int]
+    sources: list[int] | list[str]
 
 
 def _tokenize(text: str) -> set[str]:
     text = _CITATION_RE.sub(" ", text)
-    return set(re.findall(r"[a-zäöüß0-9]+", text.lower()))
+    tokens = set(re.findall(r"[a-zäöüß0-9]+", text.lower()))
+    # Zeilen-IDs (m01) analog zu L-IDs im Schwesterprojekt herausfiltern.
+    return {t for t in tokens if not re.fullmatch(r"m\d+", t)}
 
 
 def score_overlap(claim_text: str, source_text: str) -> float:
@@ -102,4 +104,28 @@ def check_answer(answer: str, doc_texts: list[str],
         else:
             status = "PASS"
         checks.append(SentenceCheck(sentence, status, round(score, 3), cited))
+    return checks
+
+
+def validate_claims(claims: list[dict], lines_by_id: dict[str, str]) -> list[SentenceCheck]:
+    """Prüft Briefing-Claims gegen die referenzierten Chat-Zeilen (Stufe B).
+
+    Fehlende source_lines oder unbekannte Zeilen-IDs → FAIL, sonst
+    Token-Overlap gegen den konkatenierten Zeilentext."""
+    checks: list[SentenceCheck] = []
+    for claim in claims:
+        text = claim["text"]
+        source_ids = claim.get("source_lines") or []
+        if not source_ids or any(sid not in lines_by_id for sid in source_ids):
+            checks.append(SentenceCheck(text, "FAIL", 0.0, source_ids))
+            continue
+        source_text = " ".join(lines_by_id[sid] for sid in source_ids)
+        score = score_overlap(text, source_text)
+        if score == 0.0:
+            status = "FAIL"
+        elif score < PASS_THRESHOLD:
+            status = "WEAK"
+        else:
+            status = "PASS"
+        checks.append(SentenceCheck(text, status, round(score, 3), source_ids))
     return checks
