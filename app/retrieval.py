@@ -27,6 +27,7 @@ class RetrievedDoc:
     url: str
     text: str
     score: float
+    rerank_score: float | None = None
 
 
 def rrf_fuse(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
@@ -44,9 +45,21 @@ def _default_encoder():
     return lambda text: model.encode([text], normalize_embeddings=True)[0].tolist()
 
 
+def _default_reranker():
+    from sentence_transformers import CrossEncoder
+
+    model = CrossEncoder(settings.rerank_model)
+    return lambda query, texts: [float(s) for s in model.predict([(query, t) for t in texts])]
+
+
 class Retriever:
-    def __init__(self, index_dir: Path, corpus_path: Path, encoder=None):
+    def __init__(self, index_dir: Path, corpus_path: Path, encoder=None, reranker=None):
+        """reranker: Callable[(query, texts) -> scores] | None (Default-Modell) | False (aus)."""
         self.encoder = encoder or _default_encoder()
+        if reranker is False:
+            self.reranker = None
+        else:
+            self.reranker = reranker or _default_reranker()
         client = chromadb.PersistentClient(path=str(index_dir / "chroma"))
         self.collection = client.get_collection("docs")
         with open(index_dir / "bm25.pkl", "rb") as f:
@@ -71,8 +84,14 @@ class Retriever:
             return []
 
         fused = rrf_fuse([vector_ranking, bm25_ranking])
-        top = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:top_k]
-        return [self._to_doc(doc_id, score) for doc_id, score in top]
+        candidates = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:n]
+        docs = [self._to_doc(doc_id, score) for doc_id, score in candidates]
+        if self.reranker is not None:
+            scores = self.reranker(query, [f"{d.title}\n{d.text}" for d in docs])
+            for doc, score in zip(docs, scores):
+                doc.rerank_score = round(float(score), 4)
+            docs.sort(key=lambda d: d.rerank_score, reverse=True)
+        return docs[:top_k]
 
     def _to_doc(self, doc_id: str, score: float) -> RetrievedDoc:
         doc = self.docs[doc_id]

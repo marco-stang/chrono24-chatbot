@@ -73,7 +73,9 @@ function addRetrievalDetails(docs) {
   for (const d of docs) {
     const li = document.createElement("li");
     const code = document.createElement("code");
-    code.textContent = d.score.toFixed(3);
+    code.textContent = d.rerank == null
+      ? d.score.toFixed(3)
+      : `RRF ${d.score.toFixed(3)} → Rerank ${d.rerank.toFixed(2)}`;
     li.append(code, ` ${d.title}`);
     list.appendChild(li);
   }

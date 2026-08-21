@@ -88,7 +88,8 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
                 standalone = await app.state.rewrite_fn(history, question, client)
                 docs = app.state.retriever.retrieve(standalone)
                 yield sse({"type": "retrieval",
-                           "docs": [{"id": d.id, "title": d.title, "score": d.score}
+                           "docs": [{"id": d.id, "title": d.title, "score": d.score,
+                                     "rerank": d.rerank_score}
                                     for d in docs]})
                 if not docs:
                     yield sse({"type": "token", "text": NOT_FOUND_ANSWER})
