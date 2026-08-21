@@ -91,6 +91,7 @@ async function ask(question) {
   history.push({ role: "user", content: question });
   const botEl = addMessage("bot", "…");
   let answer = "";
+  let sourceItems = null;
 
   try {
     const response = await fetch("/api/chat", {
@@ -123,12 +124,19 @@ async function ask(question) {
         } else if (event.type === "retrieval") {
           addRetrievalDetails(event.docs);
         } else if (event.type === "sources") {
-          addSources(event.items);
+          sourceItems = event.items;
         } else if (event.type === "error") {
           botEl.textContent = event.message;
         }
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
+    }
+    // Nur die im Antworttext zitierten Quellen [n] anzeigen — alle 5 Kandidaten
+    // bleiben im Retrieval-Details-Panel sichtbar.
+    if (sourceItems) {
+      const cited = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+      const used = sourceItems.filter((s) => cited.has(s.n));
+      addSources(used.length ? used : sourceItems.slice(0, 1));
     }
     if (answer) history.push({ role: "assistant", content: answer });
   } catch {
