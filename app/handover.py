@@ -7,9 +7,6 @@ from __future__ import annotations
 
 import json
 
-from app import faithcheck
-from app.config import settings
-
 MAX_ATTEMPTS = 2
 MAX_BRIEFING_TOKENS = 1024
 
