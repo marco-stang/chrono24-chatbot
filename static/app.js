@@ -112,6 +112,109 @@ function addValidationDetails(sentences) {
   messagesEl.appendChild(details);
 }
 
+const handoverBtn = document.getElementById("handover");
+const NOT_FOUND_TEXT = "Dazu finde ich nichts in den Chrono24-Hilfeseiten.";
+const STATUS_LABEL = { ok: "✅ geprüft", rejected: "⛔ abgelehnt" };
+
+function lineTooltip(lines, ids) {
+  const byId = new Map(lines.map((l) => [l.id, `${l.actor}: ${l.text}`]));
+  return ids.map((id) => `${id} — ${byId.get(id) || "?"}`).join("\n");
+}
+
+function briefingRow(label, text, check, lines) {
+  const row = document.createElement("div");
+  row.className = "briefing-row";
+  const icon = check ? STATUS_ICON[check.status] : "";
+  const strong = document.createElement("strong");
+  strong.textContent = label + ": ";
+  row.append(`${icon} `, strong, text);
+  if (check && check.sources.length) {
+    const ids = document.createElement("span");
+    ids.className = "line-ids";
+    ids.textContent = ` [${check.sources.join(", ")}]`;
+    ids.title = lineTooltip(lines, check.sources);
+    row.appendChild(ids);
+  }
+  return row;
+}
+
+function addBriefingCard(result) {
+  const card = document.createElement("div");
+  card.className = "briefing";
+  const head = document.createElement("div");
+  head.className = "briefing-head";
+  head.textContent = `Übergabe-Briefing · ${STATUS_LABEL[result.status]}`;
+  card.appendChild(head);
+
+  if (result.status === "rejected") {
+    const p = document.createElement("p");
+    p.textContent =
+      `Briefing nicht belegbar — der Validator hat ${result.failed_claims.length} ` +
+      "Aussage(n) abgelehnt. Der Roh-Verlauf würde übergeben. " +
+      "(Demo: es findet keine echte Weiterleitung statt.)";
+    card.appendChild(p);
+    messagesEl.appendChild(card);
+    return;
+  }
+
+  // validation-Reihenfolge = situation, history, sentiment-quote, open_question, claims
+  const v = result.validation;
+  const b = result.briefing;
+  card.appendChild(briefingRow("Situation", b.situation.text, v[0], result.lines));
+  card.appendChild(briefingRow("Verlauf", b.history.text, v[1], result.lines));
+  card.appendChild(briefingRow("Stimmung",
+    `${b.sentiment.label} — „${b.sentiment.quote}"`, v[2], result.lines));
+  card.appendChild(briefingRow("Offene Frage", b.open_question.text, v[3], result.lines));
+  b.claims.forEach((claim, i) => {
+    card.appendChild(briefingRow("Aussage", claim.text, v[4 + i], result.lines));
+  });
+  const legend = document.createElement("p");
+  legend.className = "legend";
+  legend.textContent =
+    "✅ Wortlaut deckt sich mit dem Chat · 🟡 paraphrasiert · 🔴 nicht belegt · (Demo: keine echte Weiterleitung)";
+  card.appendChild(legend);
+  messagesEl.appendChild(card);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function requestHandover() {
+  handoverBtn.disabled = true;
+  handoverBtn.textContent = "Übergebe …";
+  try {
+    const response = await fetch("/api/handover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: history.slice(-20) }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      addMessage("bot", body.detail || "Übergabe gerade nicht möglich — bitte später erneut versuchen.");
+      return;
+    }
+    addBriefingCard(await response.json());
+  } catch {
+    addMessage("bot", "Verbindungsfehler bei der Übergabe — bitte gleich nochmal versuchen.");
+  } finally {
+    handoverBtn.disabled = false;
+    handoverBtn.textContent = "An Support übergeben";
+  }
+}
+
+handoverBtn.addEventListener("click", requestHandover);
+
+function offerHandover() {
+  const div = document.createElement("div");
+  div.className = "handover-offer";
+  div.append("Der Bot weiß hier nicht weiter — ");
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "handover-link";
+  link.textContent = "an einen Menschen übergeben?";
+  link.addEventListener("click", requestHandover);
+  div.appendChild(link);
+  messagesEl.appendChild(div);
+}
+
 async function ask(question) {
   input.value = "";
   sendBtn.disabled = true;
@@ -173,7 +276,11 @@ async function ask(question) {
     // Nach den Quellen rendern, damit die [n]-Ampeln unter der Liste stehen,
     // die erklärt, worauf sich [n] bezieht.
     if (validationSentences) addValidationDetails(validationSentences);
-    if (answer) history.push({ role: "assistant", content: answer });
+    if (answer) {
+      history.push({ role: "assistant", content: answer });
+      handoverBtn.hidden = false;
+      if (answer.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
+    }
   } catch {
     botEl.textContent = "Verbindungsfehler — bitte gleich nochmal versuchen.";
   } finally {

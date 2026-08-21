@@ -61,6 +61,20 @@ header h1 { font-size: 1.3rem; }
 .validation li { margin-bottom: 0.2rem; }
 .validation .legend { margin-top: 0.4rem; font-size: 0.75rem; }
 
+.briefing { font-size: 0.85rem; background: var(--panel); border: 1px solid var(--muted);
+  border-radius: 10px; padding: 0.6rem 0.9rem; }
+.briefing-head { font-weight: 600; margin-bottom: 0.4rem; }
+.briefing-row { margin-bottom: 0.3rem; }
+.briefing .line-ids { color: var(--accent); cursor: help; }
+.briefing .legend { margin-top: 0.4rem; font-size: 0.75rem; color: var(--muted); }
+.handover-offer { font-size: 0.85rem; color: var(--muted); }
+.handover-link { background: none; border: none; color: var(--accent);
+  cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline; }
+#handover { background: var(--panel); color: var(--text); border: 1px solid var(--muted);
+  border-radius: 8px; padding: 0.6rem 0.9rem; cursor: pointer; }
+#handover:hover { border-color: var(--accent); }
+#handover:disabled { opacity: 0.5; }
+
 .examples { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .example { background: var(--panel); color: var(--text); border: 1px solid var(--muted);
   border-radius: 999px; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.85rem; }
