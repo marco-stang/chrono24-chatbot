@@ -9,7 +9,7 @@ from pathlib import Path
 import chromadb
 
 from app.config import settings
-from app.textproc import tokenize
+from app.textproc import expand_query, tokenize
 
 TOP_K_CANDIDATES = 10
 RRF_K = 60
@@ -75,7 +75,9 @@ class Retriever:
         vector_ranking = res["ids"][0]
         best_sim = 1.0 - res["distances"][0][0] if res["distances"][0] else 0.0
 
-        bm25_scores = self.bm25.get_scores(tokenize(query))
+        # Synonym-Expansion nur hier: BM25 braucht exakte Wortformen, die
+        # Embeddings matchen Bedeutung auch ohne Hilfe.
+        bm25_scores = self.bm25.get_scores(expand_query(query))
         order = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
         bm25_ranking = [self.doc_ids[i] for i in order[:n] if bm25_scores[i] > 0]
         best_bm25 = bm25_scores[order[0]] if len(order) else 0.0

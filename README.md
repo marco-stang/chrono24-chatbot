@@ -13,7 +13,8 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 **Auf einen Blick:**
 
 - **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
-  Cross-Encoder-Reranker — 88 % Hit-Rate@5, held-out validiert (87 %)
+  Cross-Encoder-Reranker, Synonym-Expansion — 91 % Hit-Rate@5,
+  held-out validiert (87 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot ehrlich „weiß ich nicht"
 - **Laufzeit-Faithfulness-Check:** jeder Antwortsatz wird deterministisch
@@ -93,6 +94,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | B: FAQ-Embedding auf Frage+Antwort statt nur Frage umgestellt | 82 % (27/33) |
 | A+B kombiniert | 88 % (29/33) |
 | **Gewinner: Status quo** (`TOP_K_CANDIDATES=10`, FAQ-Embedding = Frage) | **88 % (29/33)** |
+| + handkuratierte Synonym-Expansion der Query (nur BM25-Pfad) | **91 % (30/33)** |
+| verworfen: Titel-Exaktheits-Bonus auf den Rerank-Score (α = 0.5–4) | 88 % → 85 % |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -108,10 +111,26 @@ fast-identische Chunks die Top-5 verstopfen — zusammen mit dem Reranker
 ist er neutral bis positiv. Die Query-Übersetzung ändert auf diesem Set
 keinen Zähler (zwei der drei englischen Fragen trafen schon über die
 multilingualen Embeddings), macht den Live-Pfad für englische Fragen aber
-robust, weil BM25 sonst am deutschen Korpus vorbeiläuft. Die 4
-verbleibenden Misses sind diagnostizierte harte Fälle (mehrdeutige
-Zuordnung, z. B. „Certified" mit vielen nahen Kandidaten) — keine
-geschönten Fragen, keine kaputte Konfidenzschwelle.
+robust, weil BM25 sonst am deutschen Korpus vorbeiläuft.
+
+Die Synonym-Expansion (`QUERY_SYNONYMS` in `app/textproc.py`) kam nach
+einer Diagnose der damals 4 Misses dazu: Alltagswörter der Nutzerfragen
+(„bezahlen", „zurückschicken") ergänzen im BM25-Pfad ihre FAQ-Pendants
+(„kostet", „Rückgabe") — dasselbe Muster wie ein Elasticsearch-Synonym-
+Filter, bewusst klein gehalten, Embeddings bleiben unangetastet. Das holt
+den „zurückschicken"-Miss ohne einen einzigen Fall zu kippen (Held-out
+unverändert 13/15). Ehrlicher Vorbehalt: die Liste entstand beim Anschauen
+der Misses — die 91 % bleiben eine Tuning-Set-Zahl. Ein im selben Zug
+gemessener Titel-Exaktheits-Bonus (generische Titel wie „Was kostet …"
+belohnen) wurde verworfen: wirkungslos bei kleinen Gewichten, ab α = 4
+kippt er einen bisher richtigen Fall.
+
+Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
+Retrieval findet jeweils die richtige Themenfamilie, aber das falsche
+Familienmitglied: generische Zieldokumente („Was ist Certified?", „Was
+kostet der Kommissionsverkauf?") verlieren gegen spezifischere
+Geschwister, die mehr Wortlaut der Frage tragen. Keine geschönten
+Fragen, keine kaputte Konfidenzschwelle.
 
 ### Held-out-Validierung
 
@@ -121,10 +140,11 @@ zu optimieren, ist real. Als Gegenprobe gibt es `eval/questions_holdout.json`:
 15 neue, nie fürs Tuning verwendete Fragen zu Dokumenten, die im
 Tuning-Set nicht als Ziel vorkommen (11 FAQ-, 4 Seiten-Chunk-Ziele, 2
 englisch), einmalig gegen die finale Konfiguration gemessen:
-**87 % (13/15)**. Das liegt nur einen Punkt unter der Tuning-Zahl (88 %) —
-kein Anzeichen für Eval-Set-Overfitting, weil ein System, das nur auf die
-33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich stärker
-einbrechen würde.
+**87 % (13/15)**. Das liegt nahe an der Tuning-Zahl (91 %) — kein
+Anzeichen für schweres Eval-Set-Overfitting, weil ein System, das nur auf
+die 33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich stärker
+einbrechen würde. Die später ergänzte Synonym-Expansion wurde auf dem
+Held-out gegengeprüft: exakt gleiche Treffer (13/15), kein Fall kippt.
 
 ### Antwortqualität (LLM-as-Judge)
 

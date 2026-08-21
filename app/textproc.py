@@ -17,6 +17,31 @@ def tokenize(text: str) -> list[str]:
     return TOKEN_RE.findall(text.lower())
 
 
+# Handkuratierte Synonym-Expansion für den BM25-Pfad — wie ein
+# Elasticsearch-Synonym-Filter, bewusst klein gehalten. Schließt die
+# Alltagswort-Lücke zwischen Nutzerfragen ("bezahlen", "zurückschicken")
+# und FAQ-Titeln ("Was kostet …", "Rückgabebedingungen"). Gemessen:
+# Tuning-Set 88 % → 91 %, Held-out unverändert (siehe README).
+QUERY_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "bezahlen": ("kosten", "kostet"),
+    "gebühr": ("kosten", "kostet"),
+    "gebühren": ("kosten", "kostet"),
+    "preis": ("kosten", "kostet"),
+    "kostet": ("gebühr",),
+    "kosten": ("gebühr",),
+    "zurückschicken": ("rückgabe", "zurückgeben"),
+    "zurücksenden": ("rückgabe", "zurückgeben"),
+    "retoure": ("rückgabe",),
+}
+
+
+def expand_query(text: str) -> list[str]:
+    """Query-Tokens plus Synonyme (nur für BM25 — Embeddings bleiben roh)."""
+    tokens = tokenize(text)
+    extra = [syn for t in tokens for syn in QUERY_SYNONYMS.get(t, ())]
+    return tokens + extra
+
+
 def looks_german(text: str) -> bool:
     if any(c in text.lower() for c in "äöüß"):
         return True
