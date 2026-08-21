@@ -19,11 +19,37 @@ def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, 
     return hits / len(questions), misses
 
 
+def _rewrite_questions(questions: list[dict]) -> list[dict]:
+    """Nicht-deutsche Fragen per Haiku umformulieren — wie im Live-Pfad (kostet API-Cents)."""
+    import asyncio
+
+    from app.llm import get_client, rewrite_query
+    from app.textproc import looks_german
+
+    async def rewrite_all() -> list[dict]:
+        client = get_client()
+        rewritten = []
+        for item in questions:
+            if looks_german(item["question"]):
+                rewritten.append(item)
+                continue
+            new_question = await rewrite_query([], item["question"], client)
+            print(f"  umformuliert: {item['question']!r} -> {new_question!r}")
+            rewritten.append({**item, "question": new_question})
+        return rewritten
+
+    return asyncio.run(rewrite_all())
+
+
 if __name__ == "__main__":
+    import sys
+
     from app.config import settings
     from app.retrieval import Retriever
 
     questions = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    if "--with-rewrite" in sys.argv:
+        questions = _rewrite_questions(questions)
     retriever = Retriever(settings.index_dir, settings.corpus_path)
     rate, misses = hit_rate_at_k(retriever, questions)
     print(f"Hit-Rate@5: {rate:.0%} ({len(questions) - len(misses)}/{len(questions)})")

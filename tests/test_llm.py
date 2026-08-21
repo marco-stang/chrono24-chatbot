@@ -57,3 +57,8 @@ async def test_rewrite_query_with_history_calls_llm():
     history = [{"role": "user", "content": "Wie kaufe ich eine Uhr?"}]
     result = await rewrite_query(history, "und beim Verkauf?", client=FakeClient())
     assert result == "Wie verkaufe ich eine Uhr auf Chrono24?"
+
+
+async def test_rewrite_query_translates_english_first_question():
+    result = await rewrite_query([], "How do I sell a watch on Chrono24?", client=FakeClient())
+    assert result == "Wie verkaufe ich eine Uhr auf Chrono24?"

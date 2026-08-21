@@ -49,13 +49,25 @@ Begriffe (Produktnamen, Fachbegriffe) ab, die Embeddings manchmal
 verwässern; ein RRF-Fusion aus beiden Rankings kombiniert die Stärken.
 
 Gemessen mit einem handgeschriebenen 33-Fragen-Set (26 FAQ- und 7
-Seiten-Chunk-Ziele, 3 davon englisch): **Hit-Rate@5 = 76 % (25/33)** —
-unter dem 80-%-Planziel. Die Misses sind über mehrere Stichproben
-diagnostiziert: es sind echte Ranking-Grenzen des aktuellen Ansatzes
-(fast-identische kurze Seiten-Chunks, sehr knappe Chunks ohne viel Signal,
-schwächeres Cross-Lingual-Matching bei englischen Fragen gegen einen
-deutschen Korpus), keine kaputte Konfidenzschwelle und keine geschönten
-Fragen. Details: `.superpowers/sdd/2026-08-20-chrono24-faq-chatbot/task-10-report.md`.
+Seiten-Chunk-Ziele, 3 davon englisch), iterativ verbessert — jede Stufe
+wurde einzeln gemessen, auch die, die erstmal nichts bringt:
+
+| Retrieval-Stufe | Hit-Rate@5 |
+|---|---|
+| Baseline: BM25 + Vektor + RRF | 76 % (25/33) |
+| + Near-Duplicate-Merge der Seiten-Chunks (−5 Docs) | 73 % (24/33) |
+| + Cross-Encoder-Reranker (mmarco-mMiniLMv2) über die RRF-Top-10 | **88 % (29/33)** |
+| + Query-Übersetzung nicht-deutscher Fragen vor BM25 | 88 % (29/33) |
+
+Der Dedupe-Schritt kostet solo einen BM25-Randfall, verhindert aber, dass
+fast-identische Chunks die Top-5 verstopfen — zusammen mit dem Reranker
+ist er neutral bis positiv. Die Query-Übersetzung ändert auf diesem Set
+keinen Zähler (zwei der drei englischen Fragen trafen schon über die
+multilingualen Embeddings), macht den Live-Pfad für englische Fragen aber
+robust, weil BM25 sonst am deutschen Korpus vorbeiläuft. Die 4
+verbleibenden Misses sind diagnostizierte harte Fälle (mehrdeutige
+Zuordnung, z. B. „Certified" mit vielen nahen Kandidaten) — keine
+geschönten Fragen, keine kaputte Konfidenzschwelle.
 
 ## Scraping-Ethik
 
@@ -130,6 +142,11 @@ Kostendeckel, unabhängig von der IP.
 ## Deployment (Render)
 
 Läuft als Docker-Runtime (siehe `Dockerfile`) auf Render.
+
+- **RAM-Bedarf:** Embedding-Modell plus Cross-Encoder-Reranker brauchen
+  zusammen deutlich mehr als die 512 MB des Render-Free-Tiers — für die
+  Demo ist ein Tier mit ≥ 1 GB nötig oder alternativ Hugging Face Spaces
+  (Docker).
 
 - **Env-Var:** `ANTHROPIC_API_KEY` muss gesetzt sein — ohne ihn startet der
   Service gar nicht erst (fail-fast beim Boot statt kaputter Antworten zur

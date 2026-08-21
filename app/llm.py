@@ -7,6 +7,7 @@ from anthropic import AsyncAnthropic
 
 from app.config import settings
 from app.retrieval import RetrievedDoc
+from app.textproc import looks_german
 
 SYSTEM_PROMPT = (
     "Du bist ein Assistent für Fragen zu den Hilfeseiten von Chrono24. "
@@ -52,7 +53,9 @@ def build_rewrite_prompt(history: list[dict], question: str) -> str:
 
 
 async def rewrite_query(history: list[dict], question: str, client) -> str:
-    if not history:
+    # Ohne Verlauf nur umformulieren, wenn die Frage nicht deutsch aussieht —
+    # BM25 arbeitet auf deutschem Korpus, englische Queries matchen sonst kaum.
+    if not history and looks_german(question):
         return question
     response = await client.messages.create(
         model=settings.model,
