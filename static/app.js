@@ -116,11 +116,6 @@ const handoverBtn = document.getElementById("handover");
 const NOT_FOUND_TEXT = "Dazu finde ich nichts in den Chrono24-Hilfeseiten.";
 const STATUS_LABEL = { ok: "✅ geprüft", rejected: "⛔ abgelehnt" };
 
-function lineTooltip(lines, ids) {
-  const byId = new Map(lines.map((l) => [l.id, `${l.actor}: ${l.text}`]));
-  return ids.map((id) => `${id} — ${byId.get(id) || "?"}`).join("\n");
-}
-
 function briefingRow(label, text, check, lines) {
   const row = document.createElement("div");
   row.className = "briefing-row";
@@ -129,11 +124,23 @@ function briefingRow(label, text, check, lines) {
   strong.textContent = label + ": ";
   row.append(`${icon} `, strong, text);
   if (check && check.sources.length) {
-    const ids = document.createElement("span");
-    ids.className = "line-ids";
-    ids.textContent = ` [${check.sources.join(", ")}]`;
-    ids.title = lineTooltip(lines, check.sources);
-    row.appendChild(ids);
+    // "Beleg prüfen" wie im Schwesterprojekt: wörtliches Zeilenzitat + Score.
+    const details = document.createElement("details");
+    details.className = "belege";
+    const summary = document.createElement("summary");
+    summary.textContent =
+      `Beleg prüfen [${check.sources.join(", ")}] · Score ${check.score.toFixed(2)}`;
+    details.appendChild(summary);
+    const byId = new Map(lines.map((l) => [l.id, l]));
+    for (const id of check.sources) {
+      const quote = document.createElement("blockquote");
+      const line = byId.get(id);
+      quote.textContent = line
+        ? `${id} · ${line.actor}: ${line.text}`
+        : `${id} — Zeile nicht gefunden`;
+      details.appendChild(quote);
+    }
+    row.appendChild(details);
   }
   return row;
 }
@@ -218,6 +225,74 @@ function offerHandover() {
   link.addEventListener("click", requestHandover);
   div.appendChild(link);
   messagesEl.appendChild(div);
+}
+
+// --- Demo-Szenarien: gestellte Verläufe, damit das Handover-Briefing ohne
+// Tipparbeit vorführbar ist. Das Briefing selbst entsteht immer live. ---
+const SCENARIOS = [
+  {
+    label: "🎬 Uhr nicht angekommen",
+    messages: [
+      { role: "user", content: "Ich habe vor zwei Wochen eine Omega Speedmaster bei einem Händler gekauft und sie ist immer noch nicht angekommen." },
+      { role: "assistant", content: "Der Chrono24 Käuferschutz sichert deine Zahlung ab — das Geld liegt beim Treuhandservice, bis du die Uhr erhalten hast [1]. Bei Problemen kontaktiere innerhalb von 14 Tagen nach Erhalt der Lieferung das Support-Team [2]." },
+      { role: "user", content: "Der Händler antwortet nicht mehr auf meine Nachrichten. Was kann ich jetzt konkret tun?" },
+      { role: "assistant", content: "Wende dich direkt an das Chrono24 Support-Team — der Käuferschutz greift, wenn die Bestellung über Chrono24 abgewickelt wurde [1]. Deine Zahlung bleibt geschützt, bis der Fall geklärt ist [2]." },
+    ],
+  },
+  {
+    label: "🎬 Bot-Sackgasse",
+    messages: [
+      { role: "user", content: "Kann ich meine Uhr über Chrono24 gegen Diebstahl versichern lassen?" },
+      { role: "assistant", content: NOT_FOUND_TEXT },
+    ],
+  },
+];
+
+function addScenarioNote() {
+  const div = document.createElement("div");
+  div.className = "scenario-note";
+  div.textContent =
+    "🎬 Gestelltes Szenario geladen — der Verlauf ist vorgeschrieben. " +
+    "Klick jetzt auf „An Support übergeben“: das Briefing entsteht live und " +
+    "jede Aussage wird gegen den Verlauf geprüft.";
+  messagesEl.appendChild(div);
+}
+
+function loadScenario(scenario) {
+  messagesEl.replaceChildren();
+  history.length = 0;
+  examplesEl.style.display = "none";
+  addScenarioNote();
+  scenario.messages.forEach((m, idx) => {
+    history.push(m);
+    const el = addMessage(m.role === "user" ? "user" : "bot", m.content);
+    // Sichtbare Zeilen-ID wie in der Akte des Schwesterprojekts — deckungs-
+    // gleich mit den M-IDs, die der Server im Briefing zitiert.
+    const badge = document.createElement("span");
+    badge.className = "line-badge";
+    badge.textContent = `M${String(idx + 1).padStart(2, "0")} · ${m.role === "user" ? "Kunde" : "Bot"}`;
+    el.prepend(badge);
+  });
+  handoverBtn.hidden = false;
+  const last = scenario.messages[scenario.messages.length - 1];
+  if (last.content.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
+  handoverBtn.classList.add("pulse");
+  setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+const scenariosEl = document.getElementById("scenarios");
+for (const scenario of SCENARIOS) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "example";
+  btn.textContent = scenario.label;
+  btn.addEventListener("click", () => {
+    // Nicht während eines laufenden Streams oder Handovers — loadScenario
+    // leert Chat und History und würde die laufende Antwort korrumpieren.
+    if (!handoverBtn.disabled && !sendBtn.disabled) loadScenario(scenario);
+  });
+  scenariosEl.appendChild(btn);
 }
 
 async function ask(question) {

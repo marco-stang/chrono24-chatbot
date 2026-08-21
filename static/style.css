@@ -75,6 +75,22 @@ header h1 { font-size: 1.3rem; }
 #handover:hover { border-color: var(--accent); }
 #handover:disabled { opacity: 0.5; }
 
+.scenarios-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  font-size: 0.8rem; color: var(--muted); }
+.scenario-note { font-size: 0.85rem; color: var(--accent); background: var(--panel);
+  border: 1px dashed var(--accent); border-radius: 8px; padding: 0.5rem 0.8rem; }
+.line-badge { display: block; font-size: 0.7rem; color: var(--muted);
+  font-family: monospace; margin-bottom: 0.2rem; }
+.briefing .belege { font-size: 0.78rem; color: var(--muted); margin: 0.2rem 0 0.3rem; }
+.briefing .belege summary { cursor: pointer; color: var(--accent); }
+.briefing .belege blockquote { margin: 0.3rem 0 0.3rem 0.8rem; padding-left: 0.6rem;
+  border-left: 2px solid var(--accent); }
+#handover.pulse { animation: handover-pulse 1s ease-in-out 3; }
+@keyframes handover-pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 4px #2f81f766; border-color: var(--accent); }
+}
+
 .examples { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .example { background: var(--panel); color: var(--text); border: 1px solid var(--muted);
   border-radius: 999px; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.85rem; }
