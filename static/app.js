@@ -317,19 +317,31 @@ let activeScenario = null;
 let scenarioStep = 0;       // Anzahl bereits gezeigter Akte
 let scenarioMsgCount = 0;   // fortlaufender M-Index über alle Akte
 let pendingHandoverTarget = null;
+let milestoneContent = null; // rechte Grid-Zelle des letzten Meilensteins
 
+// Briefing-Karten landen beim Meilenstein (Demo) oder im Chatverlauf.
 function scenarioContainer() {
-  return (activeScenario && document.getElementById("scenario-timeline")) || messagesEl;
+  return milestoneContent || messagesEl;
+}
+
+// Eine Zeile der Zeitachse: Beschriftung links der Linie, Inhalt rechts.
+function tlRow(labelText, labelClass) {
+  const timeline = document.getElementById("scenario-timeline");
+  const label = document.createElement("div");
+  label.className = `tl-label ${labelClass}`;
+  label.textContent = labelText;
+  const content = document.createElement("div");
+  content.className = "tl-content";
+  timeline.append(label, content);
+  return content;
 }
 
 function addScenarioNote() {
   const div = document.createElement("div");
   div.className = "scenario-note";
   div.textContent =
-    "🎬 Gestelltes Szenario in Akten — Akt 1 zeigt den funktionierenden Bot, " +
-    "dann läuft das Gespräch in die Sackgasse. An jedem ◆-Meilenstein " +
-    "übergibst du: das Briefing entsteht live und jede Aussage wird gegen " +
-    "den Verlauf geprüft.";
+    "🎬 Gestellter Fall — klick dich durch die Akte. An jedem ◆-Meilenstein " +
+    "erzeugst du das Briefing live; jede Aussage wird gegen den Verlauf geprüft.";
   messagesEl.appendChild(div);
 }
 
@@ -338,12 +350,11 @@ function removeScenarioNav() {
   if (nav) nav.remove();
 }
 
-function renderActMessages(messages) {
-  const container = scenarioContainer();
+function renderActMessages(messages, content) {
   for (const m of messages) {
     history.push(m);
     const el = addMessage(ROLE_CLASS[m.role], m.content);
-    container.appendChild(el);
+    content.appendChild(el);
     scenarioMsgCount++;
     // Sichtbare Zeilen-ID wie in der Akte des Schwesterprojekts — deckungs-
     // gleich mit den M-IDs, die der Server im Briefing zitiert.
@@ -357,19 +368,14 @@ function renderActMessages(messages) {
 
 function tlMilestone(target) {
   pendingHandoverTarget = target;
-  const div = document.createElement("div");
-  div.className = "tl-milestone";
-  div.append(`◆ Übergabe → ${target} — `);
+  const content = tlRow(`◆ Übergabe → ${target}`, "milestone");
   const link = document.createElement("button");
   link.type = "button";
-  link.className = "handover-link";
-  link.textContent = "jetzt übergeben ▸";
+  link.className = "handover-link pulse";
+  link.textContent = "Briefing erzeugen und übergeben ▸";
   link.addEventListener("click", requestHandover);
-  div.appendChild(link);
-  handoverBtn.hidden = false;
-  handoverBtn.classList.add("pulse");
-  setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
-  return div;
+  content.appendChild(link);
+  milestoneContent = content;
 }
 
 function renderScenarioNav() {
@@ -397,13 +403,9 @@ function renderScenarioNav() {
 
 function advanceScenario() {
   const act = activeScenario.acts[scenarioStep];
-  const container = scenarioContainer();
-  const station = document.createElement("div");
-  station.className = "tl-station";
-  station.textContent = `● Akt ${scenarioStep + 1} · ${act.title}`;
-  container.appendChild(station);
-  renderActMessages(act.messages);
-  if (act.handoverTarget) container.appendChild(tlMilestone(act.handoverTarget));
+  const content = tlRow(`Akt ${scenarioStep + 1} · ${act.title}`, "station");
+  renderActMessages(act.messages, content);
+  if (act.handoverTarget) tlMilestone(act.handoverTarget);
   scenarioStep++;
   renderScenarioNav();
 }
@@ -416,6 +418,7 @@ function loadScenario(scenario) {
   scenarioStep = 0;
   scenarioMsgCount = 0;
   pendingHandoverTarget = null;
+  milestoneContent = null;
   addScenarioNote();
   const timeline = document.createElement("div");
   timeline.id = "scenario-timeline";
@@ -438,12 +441,49 @@ for (const scenario of SCENARIOS) {
   scenariosEl.appendChild(btn);
 }
 
+// --- Tabs: freier Chat vs. geführte Übergabe-Demo ---
+const tabChat = document.getElementById("tab-chat");
+const tabDemo = document.getElementById("tab-demo");
+const tabIntro = document.getElementById("tab-intro");
+const scenariosRow = document.getElementById("scenarios-row");
+
+const TAB_INTRO = {
+  chat: "Der Live-Chatbot über die Chrono24-Hilfeseiten — jede Antwort mit " +
+    "Quellen und Faithfulness-Ampel. Wenn er nicht weiterweiß, kannst du an " +
+    "den Support übergeben.",
+  demo: "Drei gestellte Fälle zeigen, was passiert, wenn der Bot nicht " +
+    "weiterweiß: Übergabe an einen Menschen — mit live geprüftem Briefing " +
+    "statt rohem Verlauf. Ein Tab-Wechsel setzt die Ansicht zurück.",
+};
+
+function switchTab(mode) {
+  messagesEl.replaceChildren();
+  history.length = 0;
+  activeScenario = null;
+  pendingHandoverTarget = null;
+  milestoneContent = null;
+  handoverBtn.hidden = true;
+  tabIntro.textContent = TAB_INTRO[mode];
+  const demo = mode === "demo";
+  tabChat.classList.toggle("active", !demo);
+  tabDemo.classList.toggle("active", demo);
+  form.hidden = demo;
+  examplesEl.hidden = demo;
+  examplesEl.style.display = demo ? "none" : "flex";
+  scenariosRow.hidden = !demo;
+}
+
+tabChat.addEventListener("click", () => switchTab("chat"));
+tabDemo.addEventListener("click", () => switchTab("demo"));
+switchTab("chat");
+
 async function ask(question) {
   // Eigene Frage beendet den geführten Szenario-Modus; die M-Badges bleiben
   // korrekt, weil neue Nachrichten hinten angehängt werden.
   removeScenarioNav();
   activeScenario = null;
   pendingHandoverTarget = null;
+  milestoneContent = null;
   input.value = "";
   sendBtn.disabled = true;
   examplesEl.style.display = "none";

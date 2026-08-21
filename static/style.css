@@ -9,6 +9,9 @@
 
 * { box-sizing: border-box; margin: 0; }
 
+/* display:flex auf .input-row/.examples darf das hidden-Attribut nicht schlagen. */
+[hidden] { display: none !important; }
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -84,14 +87,26 @@ header h1 { font-size: 1.3rem; }
 .scenario-nav { font-size: 0.85rem; color: var(--muted); align-self: center;
   padding: 0.2rem 0; }
 
-/* Vertikale Zeitachse: Akte als ●-Stationen, Übergaben als ◆-Meilensteine. */
-.timeline { display: flex; flex-direction: column; gap: 0.5rem;
-  border-left: 2px solid var(--muted); margin-left: 0.4rem;
-  padding-left: 0.9rem; }
-.tl-station { font-weight: 600; font-size: 0.85rem; color: var(--text);
-  margin: 0.4rem 0 0.1rem -1.32rem; }
-.tl-milestone { font-size: 0.85rem; color: var(--accent);
-  margin: 0.3rem 0 0.3rem -1.32rem; }
+/* Tabs: freier Chat vs. geführte Übergabe-Demo. */
+.tabs { display: flex; gap: 0.5rem; }
+.tab { background: none; color: var(--muted); border: 0;
+  border-bottom: 2px solid transparent; padding: 0.4rem 0.6rem;
+  cursor: pointer; font-size: 0.95rem; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab-intro { font-size: 0.85rem; color: var(--muted); }
+
+/* Vertikale Zeitachse: Beschriftungen links der Linie, Chat rechts in
+   normaler Bubble-Optik. */
+.timeline { position: relative; display: grid;
+  grid-template-columns: 8rem 1fr; column-gap: 1.1rem; row-gap: 0.6rem; }
+.timeline::before { content: ""; position: absolute; top: 0; bottom: 0;
+  left: 8rem; width: 2px; background: var(--muted); }
+.tl-label { text-align: right; font-size: 0.75rem; color: var(--muted);
+  padding-top: 0.3rem; }
+.tl-label.station { font-weight: 600; color: var(--text); }
+.tl-label.milestone { color: var(--accent); }
+.tl-content { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.tl-content .handover-link { align-self: flex-start; }
 .msg.agent { background: #2ea04333; align-self: flex-start; white-space: normal; }
 .briefing .merit { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--muted);
   font-style: italic; }
@@ -99,7 +114,7 @@ header h1 { font-size: 1.3rem; }
 .briefing .belege summary { cursor: pointer; color: var(--accent); }
 .briefing .belege blockquote { margin: 0.3rem 0 0.3rem 0.8rem; padding-left: 0.6rem;
   border-left: 2px solid var(--accent); }
-#handover.pulse { animation: handover-pulse 1s ease-in-out 3; }
+.pulse { animation: handover-pulse 1s ease-in-out 3; }
 @keyframes handover-pulse {
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 4px #2f81f766; border-color: var(--accent); }
