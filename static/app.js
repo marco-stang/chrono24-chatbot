@@ -68,14 +68,16 @@ function addRetrievalDetails(docs) {
   const details = document.createElement("details");
   details.className = "retrieval";
   const summary = document.createElement("summary");
-  summary.textContent = `Retrieval-Details (${docs.length} Treffer)`;
+  summary.textContent = `🔍 Gefundene Hilfeseiten (${docs.length})`;
   const list = document.createElement("ul");
   for (const d of docs) {
     const li = document.createElement("li");
     const code = document.createElement("code");
+    // Für Nicht-Techniker: ein Wert, ein Wort. Rerank-Logits über Sigmoid
+    // in Prozent — RRF-Scores (ohne Rerank) bleiben als Rohwert.
     code.textContent = d.rerank == null
-      ? d.score.toFixed(3)
-      : `RRF ${d.score.toFixed(3)} → Rerank ${d.rerank.toFixed(2)}`;
+      ? `Relevanz ${d.score.toFixed(2)}`
+      : `Relevanz ${Math.round(100 / (1 + Math.exp(-d.rerank)))} %`;
     li.append(code, ` ${d.title}`);
     list.appendChild(li);
   }
@@ -95,7 +97,7 @@ function addValidationDetails(sentences) {
   const parts = Object.entries(counts)
     .filter(([, n]) => n > 0)
     .map(([status, n]) => `${n} ${STATUS_ICON[status]}`);
-  summary.textContent = `Faithfulness-Check (${parts.join(" / ")})`;
+  summary.textContent = `Aussagen-Prüfung (${parts.join(" / ")})`;
   const list = document.createElement("ul");
   for (const s of sentences) {
     const li = document.createElement("li");
@@ -106,8 +108,7 @@ function addValidationDetails(sentences) {
   }
   const legend = document.createElement("p");
   legend.className = "legend";
-  legend.textContent =
-    "✅ Wortlaut deckt sich mit der Quelle · 🟡 paraphrasiert oder ohne Zitat · 🔴 nicht gedeckt";
+  legend.textContent = "✅ wörtlich belegt · 🟡 sinngemäß · 🔴 keine Quelle";
   details.append(summary, list, legend);
   messagesEl.appendChild(details);
 }
@@ -180,13 +181,29 @@ function addBriefingCard(result, target = "Support") {
   card.appendChild(briefingRow("Stimmung",
     `${b.sentiment.label} — „${b.sentiment.quote}"`, v[2], result.lines));
   card.appendChild(briefingRow("Offene Frage", b.open_question.text, v[3], result.lines));
-  b.claims.forEach((claim, i) => {
-    card.appendChild(briefingRow("Aussage", claim.text, v[4 + i], result.lines));
-  });
+  // Einzelaussagen eingeklappt — die Summenzeile zeigt, DASS geprüft wird,
+  // die Detailtiefe gibt's erst auf Klick.
+  if (b.claims.length) {
+    const counts = { PASS: 0, WEAK: 0, FAIL: 0 };
+    for (const check of v.slice(4)) counts[check.status]++;
+    const claimsBox = document.createElement("details");
+    claimsBox.className = "claims";
+    const claimsSummary = document.createElement("summary");
+    const parts = Object.entries(counts)
+      .filter(([, n]) => n > 0)
+      .map(([status, n]) => `${n} ${STATUS_ICON[status]}`);
+    claimsSummary.textContent =
+      `${b.claims.length} Aussagen automatisch gegengeprüft (${parts.join(" / ")})`;
+    claimsBox.appendChild(claimsSummary);
+    b.claims.forEach((claim, i) => {
+      claimsBox.appendChild(briefingRow("Aussage", claim.text, v[4 + i], result.lines));
+    });
+    card.appendChild(claimsBox);
+  }
   const legend = document.createElement("p");
   legend.className = "legend";
   legend.textContent =
-    "✅ Wortlaut deckt sich mit dem Chat · 🟡 paraphrasiert · 🔴 nicht belegt · (Demo: keine echte Weiterleitung)";
+    "✅ wörtlich belegt · 🟡 sinngemäß · 🔴 nicht belegt · (Demo: keine echte Weiterleitung)";
   card.appendChild(legend);
   scenarioContainer().appendChild(card);
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -215,12 +232,17 @@ async function requestHandover(trigger) {
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       // detail ist bei 422 ein Array von Objekten — nur echte Strings anzeigen.
+      // slowapi liefert 429 unter dem Key "error" statt "detail".
       const detail = typeof body.detail === "string" ? body.detail : null;
-      addMessage("bot", detail || "Übergabe gerade nicht möglich — bitte später erneut versuchen.");
+      const fallback = response.status === 429
+        ? "Übergabe-Limit erreicht (3 pro Minute, 10 pro Tag) — bitte kurz warten."
+        : "Übergabe gerade nicht möglich — bitte später erneut versuchen.";
+      addMessage("bot", detail || fallback);
       return;
     }
     addBriefingCard(await response.json(), pendingHandoverTarget || "Support");
     succeeded = true;
+    if (activeScenario && pendingResolution) renderResolution();
   } catch {
     addMessage("bot", "Verbindungsfehler bei der Übergabe — bitte gleich nochmal versuchen.");
   } finally {
@@ -264,7 +286,8 @@ const ROLE_CLASS = { user: "user", assistant: "bot", agent: "agent" };
 
 const SCENARIOS = [
   {
-    label: "🎬 Uhr nicht angekommen",
+    label: "Uhr nicht angekommen",
+    sub: "Händler antwortet nicht",
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Ich habe vor zwei Wochen eine Omega Speedmaster bei einem Händler gekauft. Wie lange dauert der Versand normalerweise?" },
@@ -281,9 +304,14 @@ const SCENARIOS = [
         { role: "assistant", content: NOT_FOUND_TEXT },
       ] },
     ],
+    resolution: [
+      { role: "agent", content: "Ich habe Bestellung C24-88123 geprüft: Ihr Geld liegt sicher beim Treuhandservice. Den Händler habe ich heute schriftlich gemahnt — meldet er sich nicht binnen 48 Stunden, leiten wir die Rückabwicklung ein." },
+      { role: "user", content: "Danke, das beruhigt mich sehr!" },
+    ],
   },
   {
-    label: "🎬 Zollfrage aus der Schweiz",
+    label: "Zollfrage aus der Schweiz",
+    sub: "Zoll bei Rückgabe",
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Ich kaufe aus der Schweiz. Ist der Versand dorthin möglich?" },
@@ -300,9 +328,14 @@ const SCENARIOS = [
         { role: "assistant", content: NOT_FOUND_TEXT },
       ] },
     ],
+    resolution: [
+      { role: "agent", content: "Für die Rückerstattung der Schweizer Einfuhrabgaben stellen Sie beim Bundesamt für Zoll und Grenzsicherheit einen Rückerstattungsantrag — Link und Ausfüllhilfe habe ich Ihnen gerade per E-Mail geschickt, den Rückversand klärt der Verkäufer bereits." },
+      { role: "user", content: "Perfekt, danke für die schnelle Hilfe!" },
+    ],
   },
   {
-    label: "🎬 Widersprüchliche Angaben",
+    label: "Widersprüchliche Angaben",
+    sub: "Zahlung verschwunden",
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Wie kann ich bei Chrono24 bezahlen?" },
@@ -325,40 +358,82 @@ const SCENARIOS = [
         { role: "user", content: "Dann gebt es bitte weiter — ich will einfach mein Geld zurück." },
       ] },
     ],
+    resolution: [
+      { role: "agent", content: "Buchhaltung hier: Wir haben beide Zahlungen gefunden — Ihre Überweisung und die Kreditkartenzahlung Ihres Mannes. Die doppelte Zahlung erstatten wir innerhalb von 3 Werktagen zurück." },
+      { role: "user", content: "Super, vielen Dank!" },
+    ],
   },
 ];
 
-// Durchklickbar in Akten wie im Schwesterprojekt, an einer vertikalen
-// Zeitachse: Akte sind ●-Stationen, Übergaben ◆-Meilensteine.
+// Durchklickbar in Akten. Links läuft pro Betreuer (Bot, Tier-1, Tier-2) eine
+// eigene Swimlane: Punkt = dieser Betreuer antwortet gerade, ◆ = Übergabe —
+// die alte Lane endet, die neue startet. Der Kunde hat keine Lane, seine
+// Bubbles bleiben neutral.
 let activeScenario = null;
 let scenarioStep = 0;       // Anzahl bereits gezeigter Akte
 let scenarioMsgCount = 0;   // fortlaufender M-Index über alle Akte
 let pendingHandoverTarget = null;
-let milestoneContent = null; // rechte Grid-Zelle des letzten Meilensteins
+let milestoneContent = null; // Inhaltszelle des letzten Meilensteins
+let pendingResolution = null; // Schlussakt — erst nach Briefing am letzten ◆
+
+const LANE_LABEL = { bot: "Bot", t1: "Tier-1", t2: "Tier-2" };
+const TARGET_LANE = { "Tier-1-Support": "t1", "Tier-2-Support": "t2" };
+
+let lanes = [];                  // Lanes dieses Szenarios, z.B. ["bot","t1"]
+let laneStarted = new Set();     // Lanes, deren Linie schon läuft
+let laneEnded = new Set();       // Lanes, deren Linie beendet ist
+let ownerLane = "bot";           // wer den Fall gerade betreut
 
 // Briefing-Karten landen beim Meilenstein (Demo) oder im Chatverlauf.
 function scenarioContainer() {
   return milestoneContent || messagesEl;
 }
 
-// Eine Zeile der Zeitachse: Beschriftung links der Linie, Inhalt rechts.
-function tlRow(labelText, labelClass) {
+// Linke Rail-Zelle einer Zeile: ein Span pro Lane. "transfer" zeichnet das
+// Ende der alten und den ◆-Start der neuen Lane in derselben Zeile.
+function railCell(kind, speakerLane, fromLane, toLane) {
+  const rail = document.createElement("div");
+  rail.className = "rail";
+  for (const lane of lanes) {
+    const span = document.createElement("span");
+    span.className = `lane ${lane}`;
+    if ((kind === "transfer" || kind === "resolve") && lane === fromLane) {
+      span.classList.add("half-top");
+    } else if (kind === "transfer" && lane === toLane) {
+      span.classList.add("half-bottom", "start");
+    } else if (laneStarted.has(lane) && !laneEnded.has(lane)) {
+      span.classList.add("line");
+    }
+    if (lane === speakerLane) span.classList.add("dot");
+    rail.appendChild(span);
+  }
+  return rail;
+}
+
+// Eine Zeitachsen-Zeile: Rail links, Inhalt rechts.
+function tlRow(kind, speakerLane, fromLane, toLane) {
   const timeline = document.getElementById("scenario-timeline");
-  const label = document.createElement("div");
-  label.className = `tl-label ${labelClass}`;
-  label.textContent = labelText;
   const content = document.createElement("div");
-  content.className = "tl-content";
-  timeline.append(label, content);
+  content.className = `tl-content ${kind}`;
+  timeline.append(railCell(kind, speakerLane, fromLane, toLane), content);
   return content;
+}
+
+function laneChip(lane) {
+  const chip = document.createElement("span");
+  chip.className = `lane-chip ${lane}`;
+  chip.textContent = LANE_LABEL[lane];
+  return chip;
 }
 
 function addScenarioNote() {
   const div = document.createElement("div");
   div.className = "scenario-note";
-  div.textContent =
-    "🎬 Gestellter Fall — klick dich durch die Akte. An jedem ◆-Meilenstein " +
-    "erzeugst du das Briefing live; jede Aussage wird gegen den Verlauf geprüft.";
+  div.append("Gestellter Fall — klick dich durch. Am ◆ erzeugst du das Briefing live.");
+  const chips = document.createElement("span");
+  chips.className = "lane-chips";
+  for (const lane of lanes) chips.appendChild(laneChip(lane));
+  div.appendChild(chips);
   messagesEl.appendChild(div);
 }
 
@@ -367,31 +442,65 @@ function removeScenarioNav() {
   if (nav) nav.remove();
 }
 
-function renderActMessages(messages, content) {
+// Lane des Sprechers: Bot fest, Support-Zeilen gehören dem aktuellen Betreuer.
+function speakerLane(role) {
+  if (role === "assistant") return "bot";
+  if (role === "agent") return ownerLane;
+  return null;
+}
+
+function renderActMessages(messages) {
   for (const m of messages) {
     history.push(m);
+    const lane = speakerLane(m.role);
+    const content = tlRow("message", lane);
     const el = addMessage(ROLE_CLASS[m.role], m.content);
+    if (m.role === "agent") el.classList.add(ownerLane);
     content.appendChild(el);
     scenarioMsgCount++;
-    // Sichtbare Zeilen-ID wie in der Akte des Schwesterprojekts — deckungs-
-    // gleich mit den M-IDs, die der Server im Briefing zitiert.
+    // Sichtbare Zeilen-ID — deckungsgleich mit den M-IDs, die der Server im
+    // Briefing zitiert. Farbe folgt dem Sprecher.
     const badge = document.createElement("span");
-    badge.className = "line-badge";
+    badge.className = `line-badge ${lane || "user"}`;
     badge.textContent =
       `M${String(scenarioMsgCount).padStart(2, "0")} · ${ACTOR_LABEL[m.role]}`;
     el.prepend(badge);
   }
 }
 
-function tlMilestone(target) {
+function renderResolution() {
+  const messages = pendingResolution;
+  pendingResolution = null;
+  const title = tlRow("act", null);
+  title.textContent = "Auflösung";
+  renderActMessages(messages);
+  // Lane des letzten Betreuers endet — der Fall ist abgeschlossen.
+  const content = tlRow("resolve", null, ownerLane);
+  laneEnded.add(ownerLane);
+  const done = document.createElement("div");
+  done.className = "case-solved";
+  done.textContent = "✓ Fall gelöst";
+  content.appendChild(done);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function tlMilestone(target, resolution) {
   pendingHandoverTarget = target;
-  const content = tlRow(`◆ Übergabe → ${target}`, "milestone");
+  pendingResolution = resolution || null;
+  const toLane = TARGET_LANE[target] || "t1";
+  const content = tlRow("transfer", null, ownerLane, toLane);
+  laneEnded.add(ownerLane);
+  laneStarted.add(toLane);
+  ownerLane = toLane;
+  const label = document.createElement("div");
+  label.className = `milestone-label ${toLane}`;
+  label.textContent = `◆ Übergabe an ${LANE_LABEL[toLane]}`;
   const link = document.createElement("button");
   link.type = "button";
   link.className = "handover-link pulse";
   link.textContent = "Briefing erzeugen und übergeben ▸";
   link.addEventListener("click", () => requestHandover(link));
-  content.appendChild(link);
+  content.append(label, link);
   milestoneContent = content;
 }
 
@@ -420,9 +529,14 @@ function renderScenarioNav() {
 
 function advanceScenario() {
   const act = activeScenario.acts[scenarioStep];
-  const content = tlRow(`Akt ${scenarioStep + 1} · ${act.title}`, "station");
-  renderActMessages(act.messages, content);
-  if (act.handoverTarget) tlMilestone(act.handoverTarget);
+  const title = tlRow("act", null);
+  title.textContent = `Akt ${scenarioStep + 1} · ${act.title}`;
+  renderActMessages(act.messages);
+  // Auflösung nur am letzten Meilenstein des Szenarios anbieten.
+  const isLastAct = scenarioStep === activeScenario.acts.length - 1;
+  if (act.handoverTarget) {
+    tlMilestone(act.handoverTarget, isLastAct ? activeScenario.resolution : null);
+  }
   scenarioStep++;
   renderScenarioNav();
 }
@@ -435,11 +549,22 @@ function loadScenario(scenario) {
   scenarioStep = 0;
   scenarioMsgCount = 0;
   pendingHandoverTarget = null;
+  pendingResolution = null;
   milestoneContent = null;
+  // Lanes dieses Szenarios: Bot plus alle Übergabe-Ziele in Reihenfolge.
+  lanes = ["bot"];
+  for (const act of scenario.acts) {
+    const lane = TARGET_LANE[act.handoverTarget];
+    if (lane && !lanes.includes(lane)) lanes.push(lane);
+  }
+  laneStarted = new Set(["bot"]);
+  laneEnded = new Set();
+  ownerLane = "bot";
   addScenarioNote();
   const timeline = document.createElement("div");
   timeline.id = "scenario-timeline";
   timeline.className = "timeline";
+  timeline.style.setProperty("--lane-count", lanes.length);
   messagesEl.appendChild(timeline);
   advanceScenario();
 }
@@ -448,8 +573,12 @@ const scenariosEl = document.getElementById("scenarios");
 for (const scenario of SCENARIOS) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "example";
-  btn.textContent = scenario.label;
+  btn.className = "example scenario-btn";
+  const strong = document.createElement("strong");
+  strong.textContent = scenario.label;
+  const small = document.createElement("small");
+  small.textContent = scenario.sub;
+  btn.append(strong, small);
   btn.addEventListener("click", () => {
     // Nicht während eines laufenden Streams oder Handovers — loadScenario
     // leert Chat und History und würde die laufende Antwort korrumpieren.
@@ -465,12 +594,15 @@ const tabIntro = document.getElementById("tab-intro");
 const scenariosRow = document.getElementById("scenarios-row");
 
 const TAB_INTRO = {
-  chat: "Der Live-Chatbot über die Chrono24-Hilfeseiten — jede Antwort mit " +
-    "Quellen und Faithfulness-Ampel. Wenn er nicht weiterweiß, kannst du an " +
-    "den Support übergeben.",
-  demo: "Drei gestellte Fälle zeigen, was passiert, wenn der Bot nicht " +
-    "weiterweiß: Übergabe an einen Menschen — mit live geprüftem Briefing " +
-    "statt rohem Verlauf. Ein Tab-Wechsel setzt die Ansicht zurück.",
+  chat: "Der Bot antwortet ausschließlich aus einem Snapshot der öffentlichen " +
+    "Chrono24-Hilfeseiten (RAG: Stichwort- und Bedeutungssuche kombiniert, " +
+    "dann neu sortiert). Jede Antwort nennt ihre Quellen — und eine Ampel " +
+    "prüft Satz für Satz, ob das wirklich dort steht. Er erfindet nichts " +
+    "dazu — heißt auch: Manchmal sagt er ehrlich „weiß ich nicht\".",
+  demo: "Drei gestellte Fälle zeigen den Ernstfall: Der Bot weiß nicht " +
+    "weiter und übergibt an Menschen — nicht als roher Chatverlauf, sondern " +
+    "als automatisch erzeugtes Briefing. Jede Aussage darin wird live gegen " +
+    "das Gespräch geprüft; nicht Belegbares wird abgelehnt.",
 };
 
 function switchTab(mode) {
@@ -478,6 +610,7 @@ function switchTab(mode) {
   history.length = 0;
   activeScenario = null;
   pendingHandoverTarget = null;
+  pendingResolution = null;
   milestoneContent = null;
   handoverBtn.hidden = true;
   tabIntro.textContent = TAB_INTRO[mode];
@@ -500,6 +633,7 @@ async function ask(question) {
   removeScenarioNav();
   activeScenario = null;
   pendingHandoverTarget = null;
+  pendingResolution = null;
   milestoneContent = null;
   input.value = "";
   sendBtn.disabled = true;
