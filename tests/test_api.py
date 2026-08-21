@@ -167,3 +167,78 @@ def test_create_app_raises_without_api_key_and_no_client(tmp_path, monkeypatch):
         create_app(retriever=FakeRetriever([]),
                     budget=TokenBudget(tmp_path / "b5.sqlite3", daily_limit=100),
                     answer_fn=fake_answer_fn, rewrite_fn=fake_rewrite_fn, llm_client=None)
+
+
+# --- POST /api/handover ---
+
+HANDOVER_RESULT = {
+    "status": "ok",
+    "briefing": {"situation": {"text": "s", "source_lines": ["M01"]}},
+    "validation": [],
+    "lines": [{"id": "M01", "actor": "Kunde", "text": "Frage"}],
+    "tokens": 150,
+}
+
+
+def make_handover_client(tmp_path, budget=None, handover_fn=None):
+    async def default_fn(messages, client):
+        return dict(HANDOVER_RESULT)
+
+    app = create_app(retriever=FakeRetriever([DOC]),
+                     budget=budget or TokenBudget(tmp_path / "h.sqlite3", daily_limit=1000),
+                     answer_fn=fake_answer_fn, rewrite_fn=fake_rewrite_fn,
+                     llm_client=object(), handover_fn=handover_fn or default_fn)
+    return TestClient(app)
+
+
+HANDOVER_BODY = {"messages": [
+    {"role": "user", "content": "Meine Rolex ist nicht angekommen."},
+    {"role": "assistant", "content": "Der Käuferschutz sichert deine Zahlung ab. [1]"}]}
+
+
+def test_handover_returns_briefing_validation_lines(tmp_path):
+    response = make_handover_client(tmp_path).post("/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["briefing"]["situation"]["text"] == "s"
+    assert data["lines"][0]["id"] == "M01"
+    assert "tokens" not in data
+
+
+def test_handover_accepts_assistant_as_last_message(tmp_path):
+    # Kein "letzte Nachricht muss user sein" — Übergabe nach Bot-Antwort ist Normalfall.
+    response = make_handover_client(tmp_path).post("/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 200
+
+
+def test_handover_spends_budget(tmp_path):
+    budget = TokenBudget(tmp_path / "h2.sqlite3", daily_limit=1000)
+    make_handover_client(tmp_path, budget=budget).post("/api/handover", json=HANDOVER_BODY)
+    assert budget.used_today() == 150
+
+
+def test_handover_rejects_when_budget_empty(tmp_path):
+    budget = TokenBudget(tmp_path / "h3.sqlite3", daily_limit=10)
+    budget.spend(10)
+    response = make_handover_client(tmp_path, budget=budget).post(
+        "/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 429
+
+
+def test_handover_extract_failure_returns_502(tmp_path):
+    async def broken_fn(messages, client):
+        raise ValueError("kaputtes JSON")
+
+    response = make_handover_client(tmp_path, handover_fn=broken_fn).post(
+        "/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 502
+    assert "Briefing" in response.json()["detail"]
+
+
+def test_handover_rate_limits_after_three_per_minute(tmp_path):
+    budget = TokenBudget(tmp_path / "h4.sqlite3", daily_limit=1_000_000)
+    client = make_handover_client(tmp_path, budget=budget)
+    for _ in range(3):
+        assert client.post("/api/handover", json=HANDOVER_BODY).status_code == 200
+    assert client.post("/api/handover", json=HANDOVER_BODY).status_code == 429

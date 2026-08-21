@@ -15,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app import faithcheck, llm
+from app import faithcheck, handover, llm
 from app.config import settings
 from app.guards import TokenBudget
 from app.retrieval import Retriever
@@ -47,12 +47,16 @@ class ChatRequest(BaseModel):
         return v
 
 
+class HandoverRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=MAX_HISTORY_MESSAGES)
+
+
 def sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
-               llm_client=None) -> FastAPI:
+               llm_client=None, handover_fn=None) -> FastAPI:
     app = FastAPI(title="Chrono24-FAQ-Chatbot")
     limiter = Limiter(key_func=get_remote_address)
     app.state.limiter = limiter
@@ -67,6 +71,7 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
 
     app.state.answer_fn = answer_fn or llm.stream_answer
     app.state.rewrite_fn = rewrite_fn or llm.rewrite_query
+    app.state.handover_fn = handover_fn or handover.generate_briefing
     app.state.llm_client = llm_client
 
     @app.get("/api/health")
@@ -125,6 +130,33 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.post("/api/handover")
+    @limiter.limit("3/minute;10/day")
+    async def handover_endpoint(request: Request, body: HandoverRequest) -> dict:
+        if app.state.budget.remaining() <= 0:
+            raise HTTPException(status_code=429, detail="Demo-Budget für heute erschöpft")
+        client = app.state.llm_client or llm.get_client()
+        try:
+            result = await app.state.handover_fn(
+                [m.model_dump() for m in body.messages], client)
+        except Exception:
+            logger.exception("Handover fehlgeschlagen")
+            raise HTTPException(
+                status_code=502,
+                detail="Briefing-Erstellung fehlgeschlagen — bitte erneut versuchen.")
+        app.state.budget.spend(result["tokens"])
+        payload = {
+            "status": result["status"],
+            "briefing": result["briefing"],
+            "validation": [{"text": c.text, "status": c.status,
+                            "score": c.score, "sources": c.sources}
+                           for c in result["validation"]],
+            "lines": result["lines"],
+        }
+        if result["status"] == "rejected":
+            payload["failed_claims"] = result["failed_claims"]
+        return payload
 
     static_dir = Path("static")
     if static_dir.is_dir():
