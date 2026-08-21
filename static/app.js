@@ -177,7 +177,11 @@ function addBriefingCard(result) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+let handoverInFlight = false;
+
 async function requestHandover() {
+  if (handoverInFlight) return;
+  handoverInFlight = true;
   handoverBtn.disabled = true;
   handoverBtn.textContent = "Übergebe …";
   try {
@@ -195,6 +199,7 @@ async function requestHandover() {
   } catch {
     addMessage("bot", "Verbindungsfehler bei der Übergabe — bitte gleich nochmal versuchen.");
   } finally {
+    handoverInFlight = false;
     handoverBtn.disabled = false;
     handoverBtn.textContent = "An Support übergeben";
   }
