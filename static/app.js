@@ -194,11 +194,18 @@ function addBriefingCard(result, target = "Support") {
 
 let handoverInFlight = false;
 
-async function requestHandover() {
+async function requestHandover(trigger) {
   if (handoverInFlight) return;
   handoverInFlight = true;
   handoverBtn.disabled = true;
-  handoverBtn.textContent = "Übergebe …";
+  const originalText = trigger ? trigger.textContent : null;
+  if (trigger) {
+    trigger.disabled = true;
+    trigger.classList.add("loading");
+    trigger.classList.remove("pulse");
+    trigger.textContent = "Briefing wird erzeugt und geprüft …";
+  }
+  let succeeded = false;
   try {
     const response = await fetch("/api/handover", {
       method: "POST",
@@ -213,16 +220,26 @@ async function requestHandover() {
       return;
     }
     addBriefingCard(await response.json(), pendingHandoverTarget || "Support");
+    succeeded = true;
   } catch {
     addMessage("bot", "Verbindungsfehler bei der Übergabe — bitte gleich nochmal versuchen.");
   } finally {
     handoverInFlight = false;
     handoverBtn.disabled = false;
-    handoverBtn.textContent = "An Support übergeben";
+    if (trigger) {
+      trigger.classList.remove("loading");
+      if (succeeded) {
+        // Bleibt deaktiviert — verhindert Doppel-Briefings am selben Meilenstein.
+        trigger.textContent = "✓ übergeben";
+      } else {
+        trigger.disabled = false;
+        trigger.textContent = originalText;
+      }
+    }
   }
 }
 
-handoverBtn.addEventListener("click", requestHandover);
+handoverBtn.addEventListener("click", () => requestHandover(handoverBtn));
 
 function offerHandover() {
   const div = document.createElement("div");
@@ -232,7 +249,7 @@ function offerHandover() {
   link.type = "button";
   link.className = "handover-link";
   link.textContent = "an einen Menschen übergeben?";
-  link.addEventListener("click", requestHandover);
+  link.addEventListener("click", () => requestHandover(link));
   div.appendChild(link);
   messagesEl.appendChild(div);
 }
@@ -373,7 +390,7 @@ function tlMilestone(target) {
   link.type = "button";
   link.className = "handover-link pulse";
   link.textContent = "Briefing erzeugen und übergeben ▸";
-  link.addEventListener("click", requestHandover);
+  link.addEventListener("click", () => requestHandover(link));
   content.appendChild(link);
   milestoneContent = content;
 }
@@ -551,6 +568,9 @@ async function ask(question) {
     if (answer) {
       history.push({ role: "assistant", content: answer });
       handoverBtn.hidden = false;
+      // Neue Antwort = neuer Übergabe-Kontext: "✓ übergeben" zurücksetzen.
+      handoverBtn.disabled = false;
+      handoverBtn.textContent = "An Support übergeben";
       if (answer.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
     }
   } catch {
