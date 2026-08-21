@@ -18,6 +18,12 @@ MESSAGES = [
 ]
 
 
+def test_build_lines_maps_agent_role_to_support():
+    lines = build_lines([{"role": "agent", "content": "Hier Tier-1-Support, ich übernehme."}])
+    assert lines == [{"id": "M01", "actor": "Support",
+                      "text": "Hier Tier-1-Support, ich übernehme."}]
+
+
 def test_build_lines_assigns_ids_and_actors():
     lines = build_lines(MESSAGES)
     assert lines == [

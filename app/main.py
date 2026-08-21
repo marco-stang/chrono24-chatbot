@@ -47,8 +47,15 @@ class ChatRequest(BaseModel):
         return v
 
 
+class HandoverMessage(BaseModel):
+    # Zusätzlich "agent": Tier-1-Support-Zeilen bei internen Übergaben —
+    # nur der Handover kennt diese Rolle, der Chat-Endpoint bleibt bei user/assistant.
+    role: Literal["user", "assistant", "agent"]
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+
 class HandoverRequest(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1, max_length=MAX_HISTORY_MESSAGES)
+    messages: list[HandoverMessage] = Field(min_length=1, max_length=MAX_HISTORY_MESSAGES)
 
 
 def sse(payload: dict) -> str:

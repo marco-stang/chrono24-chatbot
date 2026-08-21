@@ -14,8 +14,8 @@ MAX_ATTEMPTS = 2
 MAX_BRIEFING_TOKENS = 1024
 
 SYSTEM_PROMPT = """Du extrahierst ein strukturiertes Übergabe-Briefing aus einem \
-Chatverlauf zwischen einem Kunden und dem FAQ-Bot eines Luxusuhren-Marktplatzes. \
-Antworte ausschließlich mit JSON in exakt diesem Schema:
+Chatverlauf zwischen einem Kunden, dem FAQ-Bot und gegebenenfalls Support-Agenten \
+eines Luxusuhren-Marktplatzes. Antworte ausschließlich mit JSON in exakt diesem Schema:
 
 {
   "situation": {"text": "...", "source_lines": ["M01"]},
@@ -30,7 +30,7 @@ die Aussage stammt. Erfinde nichts, das nicht durch die referenzierten Zeilen \
 gedeckt ist. Falls zwei Aussagen im Chat widersprüchlich sind, gib beide als \
 separate Claims mit ihren jeweiligen Quellzeilen an, statt sie zu glätten."""
 
-_ACTOR = {"user": "Kunde", "assistant": "Bot"}
+_ACTOR = {"user": "Kunde", "assistant": "Bot", "agent": "Support"}
 _REQUIRED_FIELDS = {"situation", "history", "sentiment", "open_question", "claims"}
 
 

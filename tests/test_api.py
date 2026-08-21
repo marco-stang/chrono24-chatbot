@@ -198,6 +198,16 @@ HANDOVER_BODY = {"messages": [
     {"role": "assistant", "content": "Der Käuferschutz sichert deine Zahlung ab. [1]"}]}
 
 
+def test_handover_accepts_agent_role_chat_rejects_it(tmp_path):
+    # Tier-1→Tier-2: der Handover kennt Support-Zeilen, der Chat-Endpoint nicht.
+    body = {"messages": [
+        {"role": "user", "content": "Wo ist mein Geld?"},
+        {"role": "agent", "content": "Hier Tier-1-Support, ich übernehme den Fall."}]}
+    client = make_handover_client(tmp_path)
+    assert client.post("/api/handover", json=body).status_code == 200
+    assert client.post("/api/chat", json=body).status_code == 422
+
+
 def test_handover_returns_briefing_validation_lines(tmp_path):
     response = make_handover_client(tmp_path).post("/api/handover", json=HANDOVER_BODY)
     assert response.status_code == 200
