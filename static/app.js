@@ -83,6 +83,35 @@ function addRetrievalDetails(docs) {
   messagesEl.appendChild(details);
 }
 
+const STATUS_ICON = { PASS: "✅", WEAK: "🟡", FAIL: "🔴" };
+
+function addValidationDetails(sentences) {
+  if (!sentences.length) return;
+  const counts = { PASS: 0, WEAK: 0, FAIL: 0 };
+  for (const s of sentences) counts[s.status]++;
+  const details = document.createElement("details");
+  details.className = "validation";
+  const summary = document.createElement("summary");
+  const parts = Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([status, n]) => `${n} ${STATUS_ICON[status]}`);
+  summary.textContent = `Faithfulness-Check (${parts.join(" / ")})`;
+  const list = document.createElement("ul");
+  for (const s of sentences) {
+    const li = document.createElement("li");
+    const code = document.createElement("code");
+    code.textContent = s.score.toFixed(2);
+    li.append(`${STATUS_ICON[s.status]} `, code, ` ${s.text}`);
+    list.appendChild(li);
+  }
+  const legend = document.createElement("p");
+  legend.className = "legend";
+  legend.textContent =
+    "✅ Wortlaut deckt sich mit der Quelle · 🟡 paraphrasiert oder ohne Zitat · 🔴 nicht gedeckt";
+  details.append(summary, list, legend);
+  messagesEl.appendChild(details);
+}
+
 async function ask(question) {
   input.value = "";
   sendBtn.disabled = true;
@@ -92,6 +121,7 @@ async function ask(question) {
   const botEl = addMessage("bot", "…");
   let answer = "";
   let sourceItems = null;
+  let validationSentences = null;
 
   try {
     const response = await fetch("/api/chat", {
@@ -125,6 +155,8 @@ async function ask(question) {
           addRetrievalDetails(event.docs);
         } else if (event.type === "sources") {
           sourceItems = event.items;
+        } else if (event.type === "validation") {
+          validationSentences = event.sentences;
         } else if (event.type === "error") {
           botEl.textContent = event.message;
         }
@@ -138,6 +170,9 @@ async function ask(question) {
       const used = sourceItems.filter((s) => cited.has(s.n));
       addSources(used.length ? used : sourceItems.slice(0, 1));
     }
+    // Nach den Quellen rendern, damit die [n]-Ampeln unter der Liste stehen,
+    // die erklärt, worauf sich [n] bezieht.
+    if (validationSentences) addValidationDetails(validationSentences);
     if (answer) history.push({ role: "assistant", content: answer });
   } catch {
     botEl.textContent = "Verbindungsfehler — bitte gleich nochmal versuchen.";

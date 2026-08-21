@@ -129,6 +129,25 @@ systematisch übersehen, die ein anderes Modell auffangen würde). Für ein
 belastbareres Signal wäre ein stärkeres oder anderes Modell als Judge
 vorzuziehen; hier ist es eine bewusste Kostenentscheidung fürs Demo-Projekt.
 
+### Laufzeit-Faithfulness-Check (deterministisch)
+
+Der LLM-Judge misst offline; zur Laufzeit prüfte lange nichts, ob eine
+Antwort wirklich durch die zitierten Quellen gedeckt ist — die Zitierpflicht
+stand nur im System-Prompt. Das schließt `app/faithcheck.py`: nach jedem
+Antwort-Stream wird die Antwort in Sätze zerlegt und jeder Satz per
+Token-Overlap (Schwelle 0.5) gegen die zitierten `[n]`-Quellen geprüft —
+deterministisch, ohne zusätzlichen LLM-Call, unbestechlich. Das Ergebnis
+geht als eigenes SSE-Event ans Frontend und erscheint dort als
+aufklappbares Panel mit Ampel pro Satz: ✅ Wortlaut deckt sich mit der
+Quelle, 🟡 paraphrasiert oder ohne Zitat, 🔴 nicht gedeckt oder ungültiges
+Zitat. Die Antwort wird nicht blockiert, nur transparent gemacht.
+
+Bewusste Grenze: Token-Overlap ist ein grobes Maß — inhaltlich korrekte
+Paraphrasen erscheinen gelb. Das ist Absicht: der Validator misst, statt zu
+vertrauen. Derselbe Validator (gleiche Tokenisierung, gleiche Schwelle)
+läuft auch im Schwesterprojekt „Handover Brief Generator" — dort
+blockierend mit Retry-Logik, hier anzeigend.
+
 ## Scraping-Ethik
 
 `robots.txt` von chrono24.de wurde vor dem Scrape-Lauf geprüft: für

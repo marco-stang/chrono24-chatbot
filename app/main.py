@@ -15,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app import llm
+from app import faithcheck, llm
 from app.config import settings
 from app.guards import TokenBudget
 from app.retrieval import Retriever
@@ -97,14 +97,23 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
                     yield sse({"type": "token", "text": NOT_FOUND_ANSWER})
                     yield sse({"type": "done"})
                     return
+                answer_text = ""
                 async for event in app.state.answer_fn(standalone, docs, history, client):
                     if event["type"] == "usage":
                         app.state.budget.spend(event["input_tokens"] + event["output_tokens"])
                     else:
+                        if event["type"] == "token":
+                            answer_text += event["text"]
                         yield sse(event)
                 yield sse({"type": "sources",
                            "items": [{"n": i, "title": d.title, "url": d.url}
                                      for i, d in enumerate(docs, 1)]})
+                checks = faithcheck.check_answer(answer_text, [d.text for d in docs],
+                                                 skip={NOT_FOUND_ANSWER})
+                yield sse({"type": "validation",
+                           "sentences": [{"text": c.text, "status": c.status,
+                                          "score": c.score, "sources": c.sources}
+                                         for c in checks]})
                 yield sse({"type": "done"})
             except Exception:
                 logger.exception("Chat-Anfrage fehlgeschlagen")

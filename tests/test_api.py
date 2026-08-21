@@ -62,9 +62,22 @@ def test_chat_streams_tokens_sources_done(tmp_path):
     assert response.headers["x-accel-buffering"] == "no"
     events = parse_sse(response.text)
     types = [e["type"] for e in events]
-    assert types == ["retrieval", "token", "token", "sources", "done"]
+    assert types == ["retrieval", "token", "token", "sources", "validation", "done"]
     sources = next(e for e in events if e["type"] == "sources")
     assert sources["items"][0]["url"] == "https://www.chrono24.de/info/faqs.htm"
+
+
+def test_chat_emits_validation_event_after_sources(tmp_path):
+    response = make_client(tmp_path, [DOC]).post("/api/chat", json={"messages": [
+        {"role": "user", "content": "Wie funktioniert der Käuferschutz?"}]})
+    events = parse_sse(response.text)
+    types = [e["type"] for e in events]
+    assert types == ["retrieval", "token", "token", "sources", "validation", "done"]
+    validation = next(e for e in events if e["type"] == "validation")
+    [sentence] = validation["sentences"]
+    assert sentence["status"] == "PASS"
+    assert sentence["sources"] == [1]
+    assert sentence["score"] >= 0.5
 
 
 def test_chat_offtopic_returns_notfound_message(tmp_path):

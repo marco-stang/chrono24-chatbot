@@ -54,6 +54,13 @@ header h1 { font-size: 1.3rem; }
 .retrieval code { color: var(--accent); }
 .retrieval ul { margin: 0.3rem 0 0 1.2rem; }
 
+.validation { font-size: 0.8rem; color: var(--muted); background: var(--panel);
+  border-radius: 8px; padding: 0.4rem 0.7rem; }
+.validation code { color: var(--accent); }
+.validation ul { margin: 0.3rem 0 0 1.2rem; list-style: none; padding: 0; }
+.validation li { margin-bottom: 0.2rem; }
+.validation .legend { margin-top: 0.4rem; font-size: 0.75rem; }
+
 .examples { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .example { background: var(--panel); color: var(--text); border: 1px solid var(--muted);
   border-radius: 999px; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.85rem; }
