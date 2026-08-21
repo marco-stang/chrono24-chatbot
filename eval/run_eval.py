@@ -40,7 +40,7 @@ def _rewrite_questions(questions: list[dict]) -> list[dict]:
             if looks_german(item["question"]):
                 rewritten.append(item)
                 continue
-            new_question = await rewrite_query([], item["question"], client)
+            new_question, _ = await rewrite_query([], item["question"], client)
             print(f"  umformuliert: {item['question']!r} -> {new_question!r}")
             rewritten.append({**item, "question": new_question})
         return rewritten

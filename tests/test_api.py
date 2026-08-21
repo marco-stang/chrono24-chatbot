@@ -28,7 +28,11 @@ async def fake_answer_fn(question, docs, history, client):
 
 
 async def fake_rewrite_fn(history, question, client):
-    return question
+    return question, 0
+
+
+async def fake_rewrite_fn_with_cost(history, question, client):
+    return question, 95
 
 
 def make_client(tmp_path, docs, budget=None):
@@ -76,6 +80,16 @@ def test_chat_spends_budget(tmp_path):
     make_client(tmp_path, [DOC], budget=budget).post("/api/chat", json={"messages": [
         {"role": "user", "content": "Käuferschutz?"}]})
     assert budget.used_today() == 120
+
+
+def test_chat_spends_rewrite_tokens(tmp_path):
+    budget = TokenBudget(tmp_path / "b6.sqlite3", daily_limit=1000)
+    app = create_app(retriever=FakeRetriever([DOC]), budget=budget,
+                     answer_fn=fake_answer_fn, rewrite_fn=fake_rewrite_fn_with_cost,
+                     llm_client=object())
+    TestClient(app).post("/api/chat", json={"messages": [
+        {"role": "user", "content": "Käuferschutz?"}]})
+    assert budget.used_today() == 120 + 95
 
 
 def test_chat_rejects_when_budget_empty(tmp_path):

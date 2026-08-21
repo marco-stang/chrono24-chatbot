@@ -28,8 +28,9 @@ def test_build_rewrite_prompt_contains_history_and_question():
 
 
 async def test_rewrite_query_without_history_returns_question():
-    result = await rewrite_query([], "Wie funktioniert der Käuferschutz?", client=None)
+    result, tokens = await rewrite_query([], "Wie funktioniert der Käuferschutz?", client=None)
     assert result == "Wie funktioniert der Käuferschutz?"
+    assert tokens == 0
 
 
 class FakeTextBlock:
@@ -39,9 +40,15 @@ class FakeTextBlock:
         self.text = text
 
 
+class FakeUsage:
+    input_tokens = 80
+    output_tokens = 15
+
+
 class FakeResponse:
     def __init__(self, text):
         self.content = [FakeTextBlock(text)]
+        self.usage = FakeUsage()
 
 
 class FakeMessages:
@@ -55,10 +62,12 @@ class FakeClient:
 
 async def test_rewrite_query_with_history_calls_llm():
     history = [{"role": "user", "content": "Wie kaufe ich eine Uhr?"}]
-    result = await rewrite_query(history, "und beim Verkauf?", client=FakeClient())
+    result, tokens = await rewrite_query(history, "und beim Verkauf?", client=FakeClient())
     assert result == "Wie verkaufe ich eine Uhr auf Chrono24?"
+    assert tokens == 95
 
 
 async def test_rewrite_query_translates_english_first_question():
-    result = await rewrite_query([], "How do I sell a watch on Chrono24?", client=FakeClient())
+    result, tokens = await rewrite_query([], "How do I sell a watch on Chrono24?", client=FakeClient())
     assert result == "Wie verkaufe ich eine Uhr auf Chrono24?"
+    assert tokens == 95

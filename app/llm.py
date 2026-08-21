@@ -52,11 +52,12 @@ def build_rewrite_prompt(history: list[dict], question: str) -> str:
     return "Chatverlauf:\n" + "\n".join(lines) + f"\n\nFolgefrage: {question}"
 
 
-async def rewrite_query(history: list[dict], question: str, client) -> str:
+async def rewrite_query(history: list[dict], question: str, client) -> tuple[str, int]:
+    """Gibt (umformulierte Frage, verbrauchte Tokens) zurück — Tokens fürs Budget."""
     # Ohne Verlauf nur umformulieren, wenn die Frage nicht deutsch aussieht —
     # BM25 arbeitet auf deutschem Korpus, englische Queries matchen sonst kaum.
     if not history and looks_german(question):
-        return question
+        return question, 0
     response = await client.messages.create(
         model=settings.model,
         max_tokens=MAX_REWRITE_TOKENS,
@@ -64,7 +65,8 @@ async def rewrite_query(history: list[dict], question: str, client) -> str:
         messages=[{"role": "user", "content": build_rewrite_prompt(history, question)}],
     )
     text = next((b.text for b in response.content if b.type == "text"), "").strip()
-    return text or question
+    tokens = response.usage.input_tokens + response.usage.output_tokens
+    return text or question, tokens
 
 
 async def stream_answer(

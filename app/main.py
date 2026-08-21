@@ -85,7 +85,9 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
         async def event_stream():
             try:
                 client = app.state.llm_client or llm.get_client()
-                standalone = await app.state.rewrite_fn(history, question, client)
+                standalone, rewrite_tokens = await app.state.rewrite_fn(history, question, client)
+                if rewrite_tokens:
+                    app.state.budget.spend(rewrite_tokens)
                 docs = app.state.retriever.retrieve(standalone)
                 yield sse({"type": "retrieval",
                            "docs": [{"id": d.id, "title": d.title, "score": d.score,
