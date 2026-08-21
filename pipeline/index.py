@@ -25,6 +25,37 @@ def doc_search_text(doc: dict) -> str:
     return f"{doc['heading']}\n{doc['text']}"
 
 
+# Ab dieser Cosine-Similarity gelten zwei page_chunks als inhaltsgleich.
+DEDUPE_THRESHOLD = 0.95
+
+
+def dedupe_docs(
+    docs: list[dict], embeddings: list[list[float]], threshold: float = DEDUPE_THRESHOLD
+) -> tuple[list[dict], list[list[float]]]:
+    """Entfernt near-duplicate page_chunks (Embeddings sind normalisiert, Dot = Cosine).
+
+    FAQ-Dokumente bleiben immer erhalten — ähnliche Fragen sind legitime eigene Einträge.
+    Der jeweils erste Chunk gewinnt; spätere Duplikate verdrängen sonst im Retrieval
+    das eigentlich beste Dokument aus den Top-5.
+    """
+    kept_docs: list[dict] = []
+    kept_embeddings: list[list[float]] = []
+    chunk_embeddings: list[list[float]] = []
+    for doc, emb in zip(docs, embeddings):
+        if doc["type"] == "page_chunk":
+            similarity = max(
+                (sum(a * b for a, b in zip(emb, other)) for other in chunk_embeddings),
+                default=0.0,
+            )
+            if similarity >= threshold:
+                print(f"Duplikat entfernt: {doc['id']} (Similarity {similarity:.3f})")
+                continue
+            chunk_embeddings.append(emb)
+        kept_docs.append(doc)
+        kept_embeddings.append(emb)
+    return kept_docs, kept_embeddings
+
+
 def _default_encoder(texts: list[str]) -> list[list[float]]:
     from sentence_transformers import SentenceTransformer
 
@@ -43,7 +74,8 @@ def build_index(corpus_path: Path, index_dir: Path, encoder=None) -> None:
     except NotFoundError:
         pass  # Idempotentes Aufräumen: beim ersten Lauf existiert die Collection noch nicht.
     coll = client.create_collection("docs", metadata={"hnsw:space": "cosine"})
-    coll.add(ids=[d["id"] for d in docs], embeddings=encoder([doc_embed_text(d) for d in docs]))
+    docs, embeddings = dedupe_docs(docs, encoder([doc_embed_text(d) for d in docs]))
+    coll.add(ids=[d["id"] for d in docs], embeddings=embeddings)
 
     bm25 = BM25Okapi([tokenize(doc_search_text(d)) for d in docs])
     with open(index_dir / "bm25.pkl", "wb") as f:
