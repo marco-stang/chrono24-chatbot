@@ -2,9 +2,40 @@
 
 Ein RAG-Chatbot, der Fragen zu Kauf, Verkauf, Käuferschutz und Versand auf
 Basis der öffentlichen Chrono24-Hilfeseiten beantwortet — mit Quellenangaben
-und sichtbaren Retrieval-Treffern statt einer Blackbox-Antwort.
+und sichtbaren Retrieval-Treffern statt einer Blackbox-Antwort. Was er nicht
+belegen kann, übergibt er an Menschen: als automatisch erzeugtes Briefing,
+dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 
 **Demo-Link:** folgt (Deploy steht noch aus).
+
+![Übergabe-Demo: Szenario läuft in die Sackgasse, der Bot übergibt mit live geprüftem Briefing, der Support löst den Fall](docs/img/demo-briefing.png)
+
+**Auf einen Blick:**
+
+- **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
+  Cross-Encoder-Reranker — 88 % Hit-Rate@5, held-out validiert (87 %)
+- **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
+  ohne Beleg sagt der Bot ehrlich „weiß ich nicht"
+- **Laufzeit-Faithfulness-Check:** jeder Antwortsatz wird deterministisch
+  gegen die zitierten Quellen geprüft — Ampel im UI, kein zweiter LLM-Call
+- **Handover-Briefing:** Übergabe an Menschen mit validierten Aussagen;
+  Unbelegbares wird abgelehnt statt still ausgeliefert
+- **Geführte Übergabe-Demo:** drei Szenarien an einer Betreuer-Zeitachse
+  (Bot → Tier-1 → Tier-2), Briefing-Prüfung als sichtbare Animation,
+  Kino-Modus zum automatischen Abspielen
+- **Guards:** IP-Rate-Limits und globales Tages-Token-Budget
+
+**Inhalt:**
+[Architektur](#architektur) ·
+[Warum Hybrid-RAG](#warum-hybrid-rag) ·
+[Faithfulness-Check](#laufzeit-faithfulness-check-deterministisch) ·
+[Handover](#übergabe-an-menschen-handover-briefing) ·
+[Übergabe-Demo](#die-übergabe-demo) ·
+[Scraping-Ethik](#scraping-ethik) ·
+[Lokal starten](#lokal-starten) ·
+[Tests](#tests) ·
+[Guards](#guards) ·
+[Deployment](#deployment-render)
 
 ## Disclaimer
 
@@ -129,7 +160,7 @@ systematisch übersehen, die ein anderes Modell auffangen würde). Für ein
 belastbareres Signal wäre ein stärkeres oder anderes Modell als Judge
 vorzuziehen; hier ist es eine bewusste Kostenentscheidung fürs Demo-Projekt.
 
-### Laufzeit-Faithfulness-Check (deterministisch)
+## Laufzeit-Faithfulness-Check (deterministisch)
 
 Der LLM-Judge misst offline; zur Laufzeit prüfte lange nichts, ob eine
 Antwort wirklich durch die zitierten Quellen gedeckt ist — die Zitierpflicht
@@ -138,9 +169,11 @@ Antwort-Stream wird die Antwort in Sätze zerlegt und jeder Satz per
 Token-Overlap (Schwelle 0.5) gegen die zitierten `[n]`-Quellen geprüft —
 deterministisch, ohne zusätzlichen LLM-Call, unbestechlich. Das Ergebnis
 geht als eigenes SSE-Event ans Frontend und erscheint dort als
-aufklappbares Panel mit Ampel pro Satz: ✅ Wortlaut deckt sich mit der
-Quelle, 🟡 paraphrasiert oder ohne Zitat, 🔴 nicht gedeckt oder ungültiges
+aufklappbares Panel „Aussagen-Prüfung" mit Ampel pro Satz: ✅ wörtlich
+belegt, 🟡 sinngemäß oder ohne Zitat, 🔴 nicht gedeckt oder ungültiges
 Zitat. Die Antwort wird nicht blockiert, nur transparent gemacht.
+
+![Chat-Antwort mit Quellenangaben, gefundenen Hilfeseiten und Aussagen-Prüfung](docs/img/chat-antwort.png)
 
 Bewusste Grenze: Token-Overlap ist ein grobes Maß — inhaltlich korrekte
 Paraphrasen erscheinen gelb. Das ist Absicht: der Validator misst, statt zu
@@ -148,7 +181,7 @@ vertrauen. Derselbe Validator (gleiche Tokenisierung, gleiche Schwelle)
 läuft auch im Schwesterprojekt „Handover Brief Generator" — dort
 blockierend mit Retry-Logik, hier anzeigend.
 
-### Übergabe an Menschen (Handover-Briefing)
+## Übergabe an Menschen (Handover-Briefing)
 
 Wenn der Bot nicht weiterweiß — oder auf Knopfdruck — übergibt er den
 Chatverlauf an einen menschlichen Support-Agenten: `POST /api/handover`
@@ -162,6 +195,25 @@ Demo-Karte sagt das offen. Der Handover-Call läuft über dieselben Guards
 (Rate-Limit 3/min, Tages-Token-Budget). Damit ist die Produktstory
 komplett: der Bot beantwortet, was er belegen kann; was nicht, übergibt
 er an einen Menschen — mit geprüftem Briefing.
+
+## Die Übergabe-Demo
+
+Der Tab „Übergabe-Demo" führt die Produktstory ohne Vorwissen vor: drei
+gestellte Sackgassen-Szenarien („Uhr nicht angekommen", „Zollfrage aus der
+Schweiz", „Widersprüchliche Angaben"), durchklickbar in Akten. Links der
+Nachrichten läuft pro Betreuer eine farbige Zeitachsen-Lane (Bot blau,
+Tier-1 grün, Tier-2 bernstein) — am ◆-Meilenstein endet die alte Lane und
+die Übergabe erzeugt **live** ein echtes Briefing über `POST /api/handover`.
+Die Validierung ist dabei sichtbar inszeniert: jede Briefing-Zeile erscheint
+erst als „wird geprüft", dann klappt das Ampel-Ergebnis mit Beleg-Zitat ein.
+Nach erfolgreichem Briefing löst ein gestellter Schlussakt den Fall auf
+(„✓ Fall gelöst"). Szenario 3 zeigt zusätzlich eine interne Eskalation
+Tier-1 → Tier-2. Ein Kino-Modus („▶ Automatisch abspielen") spielt den
+kompletten Fall inklusive Briefing selbstständig ab.
+
+Die Chat-Verläufe der Szenarien sind gestellt und als solche markiert; die
+Briefings darin sind es nicht — sie werden bei jedem Klick live erzeugt und
+validiert.
 
 ## Scraping-Ethik
 
