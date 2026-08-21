@@ -34,6 +34,15 @@ _ACTOR = {"user": "Kunde", "assistant": "Bot"}
 _REQUIRED_FIELDS = {"situation", "history", "sentiment", "open_question", "claims"}
 
 
+class HandoverError(Exception):
+    """Briefing-Erzeugung fehlgeschlagen; trägt die bereits verbrannten Tokens,
+    damit der Endpoint das Budget auch im Fehlerpfad korrekt belastet."""
+
+    def __init__(self, tokens: int):
+        self.tokens = tokens
+        super().__init__("Briefing-Erzeugung fehlgeschlagen")
+
+
 def build_lines(messages: list[dict]) -> list[dict]:
     return [{"id": f"M{i:02d}", "actor": _ACTOR[m["role"]], "text": m["content"]}
             for i, m in enumerate(messages, 1)]
@@ -92,16 +101,19 @@ async def generate_briefing(messages: list[dict], client) -> dict:
     failed: list = []
 
     for _ in range(MAX_ATTEMPTS):
-        response = await client.messages.create(
-            model=settings.model,
-            max_tokens=MAX_BRIEFING_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_prompt(lines, failure_note)}],
-        )
-        tokens += response.usage.input_tokens + response.usage.output_tokens
-        raw = next((b.text for b in response.content if b.type == "text"), "")
-        briefing = parse_response(raw)
-        validation = faithcheck.validate_claims(normalize_briefing(briefing), lines_by_id)
+        try:
+            response = await client.messages.create(
+                model=settings.model,
+                max_tokens=MAX_BRIEFING_TOKENS,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": build_prompt(lines, failure_note)}],
+            )
+            tokens += response.usage.input_tokens + response.usage.output_tokens
+            raw = next((b.text for b in response.content if b.type == "text"), "")
+            briefing = parse_response(raw)
+            validation = faithcheck.validate_claims(normalize_briefing(briefing), lines_by_id)
+        except Exception as exc:
+            raise HandoverError(tokens) from exc
         failed = [c for c in validation if c.status == "FAIL"]
         if not failed:
             return {"status": "ok", "briefing": briefing, "validation": validation,

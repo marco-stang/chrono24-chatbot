@@ -1,8 +1,6 @@
 """Tests für den deterministischen Faithfulness-Check (Token-Overlap)."""
-import pytest
 
 from app.faithcheck import check_answer, score_overlap, split_sentences, validate_claims
-
 
 # --- Satz-Splitting ---
 

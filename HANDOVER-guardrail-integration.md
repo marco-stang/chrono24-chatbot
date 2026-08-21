@@ -4,6 +4,8 @@ Stand: 2026-08-21. Geschrieben aus einer Session im Schwesterprojekt
 `C:\Users\Marco\02_Portfolio\Handover Brief Generator` — dieses Dokument
 übergibt den dort entwickelten Plan an eine Session in diesem Repo.
 
+Update 2026-08-21: Stufe A und Stufe B sind umgesetzt (siehe README); dieses Dokument beschreibt den ursprünglichen Plan.
+
 ## Kontext: die beiden Projekte
 
 - **Dieses Repo (chrono24-chatbot):** RAG-Chatbot über die Chrono24-Hilfeseiten.

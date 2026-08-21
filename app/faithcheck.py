@@ -5,8 +5,8 @@ L-Zeilen-IDs werden hier [n]-Zitatmarker gefiltert."""
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Collection
 
 PASS_THRESHOLD = 0.5
 # Sätze mit weniger Wörtern gelten als Floskel und werden nicht bewertet.

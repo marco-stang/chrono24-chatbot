@@ -137,9 +137,18 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
         if app.state.budget.remaining() <= 0:
             raise HTTPException(status_code=429, detail="Demo-Budget für heute erschöpft")
         client = app.state.llm_client or llm.get_client()
+        # Budget-Guard: volle 20x4000-Zeichen-Historien kosten ~60k Tokens pro
+        # Aufruf, daher nur die letzten 12 Nachrichten an das LLM geben.
+        recent_messages = [m.model_dump() for m in
+                            body.messages[-HISTORY_TURNS_FOR_LLM * 2:]]
         try:
-            result = await app.state.handover_fn(
-                [m.model_dump() for m in body.messages], client)
+            result = await app.state.handover_fn(recent_messages, client)
+        except handover.HandoverError as exc:
+            app.state.budget.spend(exc.tokens)
+            logger.exception("Handover fehlgeschlagen")
+            raise HTTPException(
+                status_code=502,
+                detail="Briefing-Erstellung fehlgeschlagen — bitte erneut versuchen.")
         except Exception:
             logger.exception("Handover fehlgeschlagen")
             raise HTTPException(

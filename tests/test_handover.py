@@ -5,6 +5,7 @@ import pytest
 
 from app.handover import (
     SYSTEM_PROMPT,
+    HandoverError,
     build_lines,
     build_prompt,
     normalize_briefing,
@@ -148,3 +149,17 @@ async def test_two_fails_returns_rejected_with_failed_claims():
     assert result["status"] == "rejected"
     assert len(client.calls) == 2
     assert any("Kontosperrung" in text for text in result["failed_claims"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_json_on_retry_raises_handover_error_with_burned_tokens():
+    # Erster Versuch: valides JSON, aber FAIL-Claim -> erzwingt den Retry.
+    # Zweiter Versuch: kaputtes JSON -> generate_briefing muss die bereits
+    # verbrannten Tokens als HandoverError weiterreichen, statt sie zu verlieren.
+    invalid_json_response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="das ist kein JSON")],
+        usage=SimpleNamespace(input_tokens=0, output_tokens=0))
+    client = FakeClient([_response(BAD_BRIEFING), invalid_json_response])
+    with pytest.raises(HandoverError) as exc_info:
+        await generate_briefing(LINES_MESSAGES, client)
+    assert exc_info.value.tokens == 150

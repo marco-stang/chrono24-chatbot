@@ -3,7 +3,9 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app import handover
 from app.config import settings
+from app.faithcheck import SentenceCheck
 from app.guards import TokenBudget
 from app.main import create_app
 from app.retrieval import RetrievedDoc
@@ -242,3 +244,59 @@ def test_handover_rate_limits_after_three_per_minute(tmp_path):
     for _ in range(3):
         assert client.post("/api/handover", json=HANDOVER_BODY).status_code == 200
     assert client.post("/api/handover", json=HANDOVER_BODY).status_code == 429
+
+
+def test_handover_error_charges_budget_for_burned_tokens(tmp_path):
+    async def failing_fn(messages, client):
+        raise handover.HandoverError(tokens=77)
+
+    budget = TokenBudget(tmp_path / "h5.sqlite3", daily_limit=1000)
+    response = make_handover_client(tmp_path, budget=budget, handover_fn=failing_fn).post(
+        "/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 502
+    assert budget.used_today() == 77
+
+
+def test_handover_trims_history_to_last_twelve_messages(tmp_path):
+    received: list = []
+
+    async def capturing_fn(messages, client):
+        received.extend(messages)
+        return dict(HANDOVER_RESULT)
+
+    body = {"messages": [{"role": "user", "content": f"Nachricht {i}"} for i in range(20)]}
+    response = make_handover_client(tmp_path, handover_fn=capturing_fn).post(
+        "/api/handover", json=body)
+    assert response.status_code == 200
+    assert len(received) == 12
+
+
+def test_handover_serializes_sentence_check_validation(tmp_path):
+    async def fn(messages, client):
+        return {**HANDOVER_RESULT,
+                "validation": [SentenceCheck("Text", "PASS", 0.8, ["M01"])]}
+
+    response = make_handover_client(tmp_path, handover_fn=fn).post(
+        "/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["validation"][0] == {"text": "Text", "status": "PASS",
+                                     "score": 0.8, "sources": ["M01"]}
+
+
+def test_handover_rejected_branch_returns_failed_claims_without_tokens(tmp_path):
+    async def fn(messages, client):
+        return {"status": "rejected",
+                "briefing": {"situation": {"text": "s", "source_lines": ["M01"]}},
+                "validation": [],
+                "lines": [{"id": "M01", "actor": "Kunde", "text": "Frage"}],
+                "failed_claims": ["X"],
+                "tokens": 10}
+
+    response = make_handover_client(tmp_path, handover_fn=fn).post(
+        "/api/handover", json=HANDOVER_BODY)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "rejected"
+    assert data["failed_claims"] == ["X"]
+    assert "tokens" not in data
