@@ -248,37 +248,94 @@ const SCENARIOS = [
   },
 ];
 
+// Durchklickbar wie die Akten im Schwesterprojekt: pro Klick erscheint das
+// nächste Nachrichtenpaar, am Ende die Übergabe-Aufforderung.
+let activeScenario = null;
+let scenarioStep = 0;
+
 function addScenarioNote() {
   const div = document.createElement("div");
   div.className = "scenario-note";
   div.textContent =
-    "🎬 Gestelltes Szenario geladen — der Verlauf ist vorgeschrieben. " +
-    "Klick jetzt auf „An Support übergeben“: das Briefing entsteht live und " +
-    "jede Aussage wird gegen den Verlauf geprüft.";
+    "🎬 Gestelltes Szenario — klick dich Schritt für Schritt durch den " +
+    "Verlauf. Am Ende übergibst du an den Support: das Briefing entsteht " +
+    "live und jede Aussage wird gegen den Verlauf geprüft.";
   messagesEl.appendChild(div);
 }
 
-function loadScenario(scenario) {
-  messagesEl.replaceChildren();
-  history.length = 0;
-  examplesEl.style.display = "none";
-  addScenarioNote();
-  scenario.messages.forEach((m, idx) => {
+function scenarioSteps(scenario) {
+  const steps = [];
+  for (let i = 0; i < scenario.messages.length; i += 2) {
+    steps.push(scenario.messages.slice(i, i + 2));
+  }
+  return steps;
+}
+
+function removeScenarioNav() {
+  const nav = document.getElementById("scenario-nav");
+  if (nav) nav.remove();
+}
+
+function renderScenarioMessages(msgs, startIdx) {
+  msgs.forEach((m, j) => {
     history.push(m);
     const el = addMessage(m.role === "user" ? "user" : "bot", m.content);
     // Sichtbare Zeilen-ID wie in der Akte des Schwesterprojekts — deckungs-
     // gleich mit den M-IDs, die der Server im Briefing zitiert.
     const badge = document.createElement("span");
     badge.className = "line-badge";
-    badge.textContent = `M${String(idx + 1).padStart(2, "0")} · ${m.role === "user" ? "Kunde" : "Bot"}`;
+    badge.textContent =
+      `M${String(startIdx + j + 1).padStart(2, "0")} · ${m.role === "user" ? "Kunde" : "Bot"}`;
     el.prepend(badge);
   });
-  handoverBtn.hidden = false;
-  const last = scenario.messages[scenario.messages.length - 1];
-  if (last.content.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
-  handoverBtn.classList.add("pulse");
-  setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
+}
+
+function renderScenarioNav() {
+  removeScenarioNav();
+  const steps = scenarioSteps(activeScenario);
+  const nav = document.createElement("div");
+  nav.id = "scenario-nav";
+  nav.className = "scenario-nav";
+  nav.append(`Schritt ${scenarioStep} von ${steps.length} · `);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "handover-link";
+  if (scenarioStep < steps.length) {
+    btn.textContent = "Nächster Schritt ▸";
+    btn.addEventListener("click", advanceScenario);
+  } else {
+    btn.textContent = "↺ Von vorn";
+    const scenario = activeScenario;
+    btn.addEventListener("click", () => loadScenario(scenario));
+  }
+  nav.appendChild(btn);
+  messagesEl.appendChild(nav);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function advanceScenario() {
+  const steps = scenarioSteps(activeScenario);
+  const shown = steps.slice(0, scenarioStep).reduce((n, s) => n + s.length, 0);
+  renderScenarioMessages(steps[scenarioStep], shown);
+  scenarioStep++;
+  if (scenarioStep >= steps.length) {
+    handoverBtn.hidden = false;
+    const last = activeScenario.messages[activeScenario.messages.length - 1];
+    if (last.content.trim().endsWith(NOT_FOUND_TEXT)) offerHandover();
+    handoverBtn.classList.add("pulse");
+    setTimeout(() => handoverBtn.classList.remove("pulse"), 4000);
+  }
+  renderScenarioNav();
+}
+
+function loadScenario(scenario) {
+  messagesEl.replaceChildren();
+  history.length = 0;
+  examplesEl.style.display = "none";
+  activeScenario = scenario;
+  scenarioStep = 0;
+  addScenarioNote();
+  advanceScenario();
 }
 
 const scenariosEl = document.getElementById("scenarios");
@@ -296,6 +353,10 @@ for (const scenario of SCENARIOS) {
 }
 
 async function ask(question) {
+  // Eigene Frage beendet den geführten Szenario-Modus; die M-Badges bleiben
+  // korrekt, weil neue Nachrichten hinten angehängt werden.
+  removeScenarioNav();
+  activeScenario = null;
   input.value = "";
   sendBtn.disabled = true;
   examplesEl.style.display = "none";

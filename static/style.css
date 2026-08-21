@@ -81,6 +81,8 @@ header h1 { font-size: 1.3rem; }
   border: 1px dashed var(--accent); border-radius: 8px; padding: 0.5rem 0.8rem; }
 .line-badge { display: block; font-size: 0.7rem; color: var(--muted);
   font-family: monospace; margin-bottom: 0.2rem; }
+.scenario-nav { font-size: 0.85rem; color: var(--muted); align-self: center;
+  padding: 0.2rem 0; }
 .briefing .belege { font-size: 0.78rem; color: var(--muted); margin: 0.2rem 0 0.3rem; }
 .briefing .belege summary { cursor: pointer; color: var(--accent); }
 .briefing .belege blockquote { margin: 0.3rem 0 0.3rem 0.8rem; padding-left: 0.6rem;
