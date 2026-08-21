@@ -148,6 +148,21 @@ vertrauen. Derselbe Validator (gleiche Tokenisierung, gleiche Schwelle)
 läuft auch im Schwesterprojekt „Handover Brief Generator" — dort
 blockierend mit Retry-Logik, hier anzeigend.
 
+### Übergabe an Menschen (Handover-Briefing)
+
+Wenn der Bot nicht weiterweiß — oder auf Knopfdruck — übergibt er den
+Chatverlauf an einen menschlichen Support-Agenten: `POST /api/handover`
+lässt Claude ein strukturiertes Briefing extrahieren
+(Situation/Verlauf/Stimmung/offene Frage/Claims, jede Aussage mit
+Zeilen-Zitaten `M01…`), und derselbe deterministische Validator prüft jede
+Aussage per Token-Overlap gegen die zitierten Chat-Zeilen. Unbelegte
+Aussagen führen zu genau einem Retry mit Fehlerhinweis; scheitert auch
+der, wird das Briefing **abgelehnt** statt still ausgeliefert — die
+Demo-Karte sagt das offen. Der Handover-Call läuft über dieselben Guards
+(Rate-Limit 3/min, Tages-Token-Budget). Damit ist die Produktstory
+komplett: der Bot beantwortet, was er belegen kann; was nicht, übergibt
+er an einen Menschen — mit geprüftem Briefing.
+
 ## Scraping-Ethik
 
 `robots.txt` von chrono24.de wurde vor dem Scrape-Lauf geprüft: für
