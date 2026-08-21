@@ -69,3 +69,82 @@ def test_normalize_briefing_flattens_all_fields_to_claims():
         {"text": "o", "source_lines": ["M02"]},
         {"text": "c1", "source_lines": ["M01"]},
     ]
+
+
+# --- generate_briefing (Orchestrator) ---
+from types import SimpleNamespace
+
+from app.handover import generate_briefing
+
+LINES_MESSAGES = [
+    {"role": "user",
+     "content": "Meine Rolex Daytona ist nach zwei Wochen immer noch nicht angekommen."},
+    {"role": "assistant",
+     "content": "Der Käuferschutz sichert deine Zahlung vollständig ab. [1]"},
+]
+
+VALID_BRIEFING = {
+    "situation": {"text": "Rolex Daytona ist nach zwei Wochen nicht angekommen",
+                  "source_lines": ["M01"]},
+    "history": {"text": "Käuferschutz sichert die Zahlung vollständig ab",
+                "source_lines": ["M02"]},
+    "sentiment": {"label": "besorgt",
+                  "quote": "nach zwei Wochen immer noch nicht angekommen",
+                  "source_lines": ["M01"]},
+    "open_question": {"text": "Wo ist die Rolex Daytona nach zwei Wochen",
+                      "source_lines": ["M01"]},
+    "claims": [],
+}
+
+BAD_BRIEFING = {**VALID_BRIEFING,
+                "claims": [{"text": "Kunde verlangt sofortige Kontosperrung wegen Betrug",
+                            "source_lines": ["M02"]}]}
+
+
+def _response(briefing, input_tokens=100, output_tokens=50):
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=json.dumps(briefing, ensure_ascii=False))],
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens))
+
+
+class FakeClient:
+    def __init__(self, responses):
+        self.calls = []
+        self._responses = list(responses)
+        self.messages = self
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._responses[len(self.calls) - 1]
+
+
+@pytest.mark.asyncio
+async def test_valid_briefing_returns_ok_with_one_call():
+    client = FakeClient([_response(VALID_BRIEFING)])
+    result = await generate_briefing(LINES_MESSAGES, client)
+    assert result["status"] == "ok"
+    assert len(client.calls) == 1
+    assert result["tokens"] == 150
+    assert all(c.status in ("PASS", "WEAK") for c in result["validation"])
+    assert result["lines"][0]["id"] == "M01"
+
+
+@pytest.mark.asyncio
+async def test_fail_then_valid_retries_with_failure_note():
+    client = FakeClient([_response(BAD_BRIEFING), _response(VALID_BRIEFING)])
+    result = await generate_briefing(LINES_MESSAGES, client)
+    assert result["status"] == "ok"
+    assert len(client.calls) == 2
+    second_prompt = client.calls[1]["messages"][0]["content"]
+    assert "unbelegte Aussage" in second_prompt
+    assert "Kontosperrung" in second_prompt
+    assert result["tokens"] == 300
+
+
+@pytest.mark.asyncio
+async def test_two_fails_returns_rejected_with_failed_claims():
+    client = FakeClient([_response(BAD_BRIEFING), _response(BAD_BRIEFING)])
+    result = await generate_briefing(LINES_MESSAGES, client)
+    assert result["status"] == "rejected"
+    assert len(client.calls) == 2
+    assert any("Kontosperrung" in text for text in result["failed_claims"])

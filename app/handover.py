@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import json
 
+from app import faithcheck
+from app.config import settings
+
 MAX_ATTEMPTS = 2
 MAX_BRIEFING_TOKENS = 1024
 
@@ -73,3 +76,38 @@ def normalize_briefing(briefing: dict) -> list[dict]:
     for claim in briefing["claims"]:
         claims.append({"text": claim["text"], "source_lines": claim["source_lines"]})
     return claims
+
+
+async def generate_briefing(messages: list[dict], client) -> dict:
+    """Extract → Validierung, bei FAIL ein Retry mit Fehlerhinweis, dann rejected.
+
+    Exceptions (kaputtes JSON, API-Fehler) propagieren zum Aufrufer —
+    kein stiller Fallback."""
+    lines = build_lines(messages)
+    lines_by_id = {line["id"]: line["text"] for line in lines}
+    tokens = 0
+    failure_note = None
+    briefing = None
+    validation: list = []
+    failed: list = []
+
+    for _ in range(MAX_ATTEMPTS):
+        response = await client.messages.create(
+            model=settings.model,
+            max_tokens=MAX_BRIEFING_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": build_prompt(lines, failure_note)}],
+        )
+        tokens += response.usage.input_tokens + response.usage.output_tokens
+        raw = next((b.text for b in response.content if b.type == "text"), "")
+        briefing = parse_response(raw)
+        validation = faithcheck.validate_claims(normalize_briefing(briefing), lines_by_id)
+        failed = [c for c in validation if c.status == "FAIL"]
+        if not failed:
+            return {"status": "ok", "briefing": briefing, "validation": validation,
+                    "lines": lines, "tokens": tokens}
+        failure_note = ("Vorherige Antwort hatte unbelegte Aussage(n): "
+                        + "; ".join(c.text for c in failed))
+
+    return {"status": "rejected", "briefing": briefing, "validation": validation,
+            "failed_claims": [c.text for c in failed], "lines": lines, "tokens": tokens}
