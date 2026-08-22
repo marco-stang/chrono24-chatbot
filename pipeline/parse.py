@@ -84,6 +84,9 @@ def parse_faq_page(html: str, url: str) -> list[dict]:
             answer = body_el.get_text(" ", strip=True)
             if not question or not answer:
                 continue
+            # Frage-genauer Deep-Link: jedes Akkordeon-Item trägt ein id="acc-N",
+            # das auf der Live-Seite als Anker funktioniert.
+            anchor = item.get("id")
             docs.append(
                 {
                     "id": f"faq-{len(docs) + 1:04d}",
@@ -91,7 +94,7 @@ def parse_faq_page(html: str, url: str) -> list[dict]:
                     "question": question,
                     "answer": answer,
                     "category": _category_for(item, chapter_name),
-                    "url": url,
+                    "url": f"{url}#{anchor}" if anchor else url,
                 }
             )
 

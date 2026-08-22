@@ -14,10 +14,16 @@ def test_parse_faq_extracts_qa_pairs():
     first = docs[0]
     assert first["type"] == "faq"
     assert first["id"] == "faq-0001"
-    assert first["url"] == URL
+    assert first["url"].startswith(URL)
     assert first["question"].strip()
     assert first["answer"].strip()
     assert first["category"].strip()
+
+
+def test_parse_faq_url_carries_question_anchor():
+    docs = parse_faq_page(FIXTURE, URL)
+    assert docs[0]["url"] == f"{URL}#acc-22"
+    assert docs[1]["url"] == f"{URL}#acc-57"
 
 
 def test_parse_faq_ids_are_unique_and_sequential():

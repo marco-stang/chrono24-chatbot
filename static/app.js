@@ -319,6 +319,17 @@ function offerHandover() {
 const ACTOR_LABEL = { user: "Kunde", assistant: "Bot", agent: "Support" };
 const ROLE_CLASS = { user: "user", assistant: "bot", agent: "agent" };
 
+// Echte Hilfeseiten, aus denen die gestellten Bot-Antworten paraphrasiert
+// sind — die [n]-Marker der Szenarien verlinken darauf.
+const SOURCE_PAGES = {
+  faq: { title: "FAQ: Uhren kaufen",
+    url: "https://www.chrono24.de/info/faqs.htm#chapter-2" },
+  escrow: { title: "Käuferschutz & Treuhandservice",
+    url: "https://www.chrono24.de/info/escrow.htm" },
+  checkout: { title: "Der Treuhandservice auf Chrono24",
+    url: "https://www.chrono24.de/info/c2c-checkout.htm" },
+};
+
 const SCENARIOS = [
   {
     label: "Uhr nicht angekommen",
@@ -326,13 +337,13 @@ const SCENARIOS = [
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Ich habe vor zwei Wochen eine Omega Speedmaster bei einem Händler gekauft. Wie lange dauert der Versand normalerweise?" },
-        { role: "assistant", content: "Der Verkäufer versendet in der Regel innerhalb weniger Werktage, der Versand ist versichert [1]. Über den Sendungsstatus wirst du per E-Mail informiert [2]." },
+        { role: "assistant", content: "Der Verkäufer versendet in der Regel innerhalb weniger Werktage, der Versand ist versichert [1]. Über den Sendungsstatus wirst du per E-Mail informiert [2].", sources: { 1: "faq", 2: "faq" } },
       ] },
       { title: "Es wird konkret — die FAQ reicht nicht mehr", messages: [
         { role: "user", content: "Es sind jetzt aber schon 14 Tage. Bestellnummer C24-88123. Der Händler antwortet nicht auf meine Nachrichten." },
-        { role: "assistant", content: "Der Käuferschutz sichert deine Zahlung ab — das Geld liegt beim Treuhandservice, bis du die Uhr erhalten hast [1]. Bei Problemen kontaktiere das Support-Team [2]." },
+        { role: "assistant", content: "Der Käuferschutz sichert deine Zahlung ab — das Geld liegt beim Treuhandservice, bis du die Uhr erhalten hast [1]. Bei Problemen kontaktiere das Support-Team [2].", sources: { 1: "escrow", 2: "faq" } },
         { role: "user", content: "Das habe ich alles gelesen. Ich will wissen, was jetzt mit MEINER Bestellung passiert." },
-        { role: "assistant", content: "Auf einzelne Bestellungen habe ich keinen Zugriff — der Käuferschutz gilt, solange die Zahlung über Chrono24 abgewickelt wurde [1]." },
+        { role: "assistant", content: "Auf einzelne Bestellungen habe ich keinen Zugriff — der Käuferschutz gilt, solange die Zahlung über Chrono24 abgewickelt wurde [1].", sources: { 1: "escrow" } },
       ] },
       { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
         { role: "user", content: "Kannst du prüfen, ob mein Geld noch beim Treuhandservice liegt, und den Händler mahnen?" },
@@ -350,13 +361,13 @@ const SCENARIOS = [
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Ich kaufe aus der Schweiz. Ist der Versand dorthin möglich?" },
-        { role: "assistant", content: "Internationaler Versand ist möglich und versichert [1]. Je nach Land können Zollgebühren anfallen [2]." },
+        { role: "assistant", content: "Internationaler Versand ist möglich und versichert [1]. Je nach Land können Zollgebühren anfallen [2].", sources: { 1: "faq", 2: "faq" } },
       ] },
       { title: "Die Rückgabe wird kompliziert", messages: [
         { role: "user", content: "Die Uhr passt mir nicht, ich will sie zurückgeben. Wer zahlt den Rückversand in die EU?" },
-        { role: "assistant", content: "Innerhalb der 14-tägigen Widerrufsfrist kannst du den Kauf rückgängig machen [1]. Die Details zum Rückversand klärst du mit dem Verkäufer [2]." },
+        { role: "assistant", content: "Innerhalb der 14-tägigen Widerrufsfrist kannst du den Kauf rückgängig machen [1]. Die Details zum Rückversand klärst du mit dem Verkäufer [2].", sources: { 1: "faq", 2: "faq" } },
         { role: "user", content: "Und die Schweizer Zollgebühren, die ich beim Import schon bezahlt habe — bekomme ich die zurück?" },
-        { role: "assistant", content: "In den Hilfeseiten steht nur, dass Zollgebühren anfallen können [2] — zu deren Erstattung finde ich dort keine Angaben." },
+        { role: "assistant", content: "In den Hilfeseiten steht nur, dass Zollgebühren anfallen können [2] — zu deren Erstattung finde ich dort keine Angaben.", sources: { 2: "faq" } },
       ] },
       { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
         { role: "user", content: "Welches Formular brauche ich beim Schweizer Zoll für die Rückerstattung, und wen kontaktiere ich dort?" },
@@ -374,13 +385,13 @@ const SCENARIOS = [
     acts: [
       { title: "Der Bot funktioniert", messages: [
         { role: "user", content: "Wie kann ich bei Chrono24 bezahlen?" },
-        { role: "assistant", content: "Per Banküberweisung oder Kreditkarte über den Treuhandservice [1] — das Geld wird erst nach Erhalt der Uhr an den Verkäufer freigegeben [2]." },
+        { role: "assistant", content: "Per Banküberweisung oder Kreditkarte über den Treuhandservice [1] — das Geld wird erst nach Erhalt der Uhr an den Verkäufer freigegeben [2].", sources: { 1: "checkout", 2: "escrow" } },
       ] },
       { title: "Die Angaben widersprechen sich", messages: [
         { role: "user", content: "Ich habe vor zwei Wochen per Überweisung bezahlt, aber der Status zeigt immer noch 'Zahlung ausstehend'." },
-        { role: "assistant", content: "Banküberweisungen brauchen einige Werktage, bis sie beim Treuhandservice eingehen [1]." },
+        { role: "assistant", content: "Banküberweisungen brauchen einige Werktage, bis sie beim Treuhandservice eingehen [1].", sources: { 1: "faq" } },
         { role: "user", content: "Moment — es war doch letzte Woche mit Kreditkarte, glaube ich. Auf jeden Fall ist das Geld weg." },
-        { role: "assistant", content: "Kreditkartenzahlungen werden sofort verbucht [1]. Den konkreten Zahlungsstatus deiner Bestellung kann ich nicht einsehen." },
+        { role: "assistant", content: "Kreditkartenzahlungen werden sofort verbucht [1]. Den konkreten Zahlungsstatus deiner Bestellung kann ich nicht einsehen.", sources: { 1: "faq" } },
       ] },
       { title: "Die Sackgasse", handoverTarget: "Tier-1-Support", messages: [
         { role: "user", content: "Egal wie — wo ist mein Geld? Kann das bitte jemand prüfen?" },
@@ -498,13 +509,29 @@ function speakerLane(role) {
 }
 
 function renderOneMessage(m) {
-  history.push(m);
+  history.push({ role: m.role, content: m.content });
   const lane = speakerLane(m.role);
   const content = tlRow("message", lane);
   const el = addMessage(ROLE_CLASS[m.role], m.content);
   el.classList.add("appear");
   if (m.role === "agent") el.classList.add(ownerLane);
   content.appendChild(el);
+  // Klickbare Quellen zu den [n]-Markern der gestellten Bot-Antworten.
+  if (m.sources) {
+    const line = document.createElement("div");
+    line.className = "sources";
+    line.append("Quellen: ");
+    for (const [n, key] of Object.entries(m.sources)) {
+      const page = SOURCE_PAGES[key];
+      const a = document.createElement("a");
+      a.href = page.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = `[${n}] ${page.title}`;
+      line.appendChild(a);
+    }
+    content.appendChild(line);
+  }
   scenarioMsgCount++;
   // Sichtbare Zeilen-ID — deckungsgleich mit den M-IDs, die der Server im
   // Briefing zitiert. Farbe folgt dem Sprecher.
