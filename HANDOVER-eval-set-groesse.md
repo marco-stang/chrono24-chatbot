@@ -1,7 +1,11 @@
 # Handover: Das Eval-Set ist zu klein
 
-**Stand:** 2026-08-24 · `main` bei `a930bd0`, **zwei Commits lokal, nicht gepusht**
-(zuletzt gepusht: `13c09d1`) · 154 Tests grün · ruff sauber · Working Tree clean
+**Stand:** 2026-08-24 · `main` bei `0cf2dda`, **vier Commits lokal, nicht gepusht**
+(zuletzt gepusht: `13c09d1`) · 162 Tests grün · ruff sauber · Working Tree clean
+
+**Schritt 4 ist bereits umgesetzt** (`eval/stats.py`) — jeder Eval-Lauf druckt jetzt sein
+Konfidenzintervall und warnt selbst, wenn die Stichprobe zu klein ist. Offen sind
+Schritte 1–3.
 
 Vorgänger-Handover: `HANDOVER-query-varianten-eval-gate.md` — dort stehen Architektur,
 Schwellen und die Ablationshistorie. Dieses Dokument behandelt genau einen offenen Punkt.
@@ -176,7 +180,7 @@ findet dort den Ausgangspunkt; die erzeugten Fragen lagen unter
 
 ## Nicht gepusht
 
-- **chrono24-chatbot:** `db0f968` und `a930bd0` liegen lokal auf `main`.
+- **chrono24-chatbot:** `db0f968`, `a930bd0`, `e62288a` und `0cf2dda` liegen lokal auf `main`.
 - **marco-os:** drei Commits lokal auf `master` (`e774d16` Projektknoten, `0451dd2`
   Portrait-Layout, `15cf2f8` Zahlen-Korrektur). Ein Push dort geht direkt live auf
   GitHub Pages. Offener Befund: mobil überlappt unten noch ein Label-Paar
