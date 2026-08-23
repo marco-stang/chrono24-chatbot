@@ -181,3 +181,23 @@ def test_check_gate_fails_below_minimum_faithful_rate():
     failures = check_gate({"faithful_rate": MIN_FAITHFUL_RATE - 0.01, "n": 10, "answered_counts": {}})
     assert len(failures) == 1
     assert "Faithful" in failures[0]
+
+
+async def test_judge_call_pins_temperature_to_zero():
+    """Der Judge ist ein Messinstrument, kein Autor. Ohne temperature=0 laeuft er
+    auf dem API-Default 1.0 und liefert fuer identischen Code unterschiedliche
+    Urteile -- drei Laeufe am 23.08.2026 ergaben 100 %, 94 % und 88 %
+    Faithful-Rate, ohne dass sich an der Pipeline etwas geaendert hatte."""
+    retriever = FakeRetriever(DOCS)
+    judge_client = FakeJudgeClient(
+        '{"faithful": true, "answered": "voll", "begruendung": "Alles gedeckt."}'
+    )
+
+    await judge_one(
+        "Wie funktioniert der Käuferschutz?",
+        retriever,
+        judge_client,
+        answer_fn=fake_answer_fn,
+    )
+
+    assert judge_client.messages.calls[0]["temperature"] == 0

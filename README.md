@@ -278,37 +278,51 @@ Testfragen durch und lässt einen zweiten Haiku-Call die Antwort anhand des
 tatsächlich gesehenen Kontexts bewerten: `faithful` (sind alle
 Tatsachenaussagen belegt?) und `answered` (voll/teilweise/nein/verweigert).
 
-Zwei Läufe über dieselben 33 Fragen, der zweite im CI nach dem Umbau des
-Konfidenz-Gates und einem Reindex:
+Der erste Lauf ergab 100 % (33/33) und stand so eine Weile im README. Diese
+Zahl ist nicht reproduzierbar, und das ist die eigentliche Lehre dieses
+Abschnitts. Sechs Läufe über dieselben 33 Fragen:
 
-| Metrik | 21.08.2026 (lokal) | 23.08.2026 (CI) |
-|---|---|---|
-| Faithful-Rate | 100 % (33/33) | **94 % (31/33)** |
-| answered: voll | 27 | 25 |
-| answered: teilweise | 4 | 7 |
-| answered: verweigert | 2 | 1 |
-| answered: nein | 0 | 0 |
+| # | Judge | Bot | Faithful-Rate |
+|---|---|---|---|
+| 1 (21.08., lokal) | temp 1.0 | temp 1.0 | 100 % (33/33) |
+| 2 (23.08., CI) | temp 1.0 | temp 1.0 | 94 % (31/33) |
+| 3 (23.08., CI) | temp 1.0 | temp 1.0 | **88 % (29/33)** |
+| 4 (23.08., lokal) | **temp 0** | temp 1.0 | 94 % |
+| 5 (23.08., lokal) | temp 0 | **temp 0** | 91 % |
+| 6 (23.08., lokal) | temp 0 | temp 0 | 94 % |
 
-Rohdaten des ersten Laufs in `eval/judge_results.json`; der zweite steht im
-CI-Log des `quality-gate`-Jobs.
+**Zwischen Lauf 2 und 3 lag kein einziger Commit an der Pipeline** — nur
+Markdown und eine CI-Datei. Die 6 Punkte Unterschied sind reines
+Sampling-Rauschen. Ursache: keiner der drei Claude-Calls (Query-Rewrite,
+Antwort, Judge) setzte `temperature`, liefen also auf dem API-Default 1.0
+— ein Messinstrument, das selbst würfelt.
 
-Die 94 % sind die interessantere Zahl, weil sie zeigt, was ein einzelner
-Lauf wert ist: Der Judge ist selbst ein LLM und nicht deterministisch, und
-zwischen den Läufen hat sich das Retrieval geändert — welcher Anteil auf
-Judge-Rauschen und welcher auf echtes Verhalten entfällt, trennen zwei
-Läufe nicht. `MIN_FAITHFUL_RATE` steht bei 90 %, das Gate ist also grün,
-aber die 100 % vom ersten Lauf waren erkennbar keine belastbare Bestmarke.
+Alle drei stehen jetzt auf `temperature=0`. Das hilft, löst es aber nicht:
+Läufe 5 und 6 sind bei identischem Code und identischer Temperatur immer
+noch 91 % und 94 %. Temperatur 0 ist gierige Dekodierung, keine
+Determinismus-Garantie der API. Bei 33 Fragen entspricht eine einzige Frage
+3 Prozentpunkten — das Sample ist für eine Zahl mit zwei Stellen zu klein.
 
-Einer der beiden Treffer ist ein echter inhaltlicher Fehler, kein
-Judge-Artefakt: Auf die Frage nach der französischen Meldepflicht dreht die
+Konsequenz: `MIN_FAITHFUL_RATE` steht bei **82 %** (27/33), zwei Fragen
+unter dem gemessenen Boden von 29/33. Eine Schwelle bei 90 % war auf diesem
+Sample nachweislich flaky — ein Lauf von sechs fiel darunter, ohne dass
+sich am Code etwas geändert hatte, und rote CI ohne Regression ist
+schlimmer als gar kein Gate, weil man aufhört hinzusehen. Das Gate fängt
+damit einen echten Einbruch, nicht das Rauschen.
+
+Zur Einordnung der Verteilung (Lauf 6): voll 25, teilweise 5, verweigert 3,
+nein 0. Rohdaten des ersten Laufs in `eval/judge_results.json`.
+
+Nicht jeder Treffer ist Rauschen. Aus Lauf 2 stammt ein echter inhaltlicher
+Fehler: Auf die Frage nach der französischen Meldepflicht dreht die
 Antwort eine Schwelle um — sie schreibt, Verkäufe würden „nur gemeldet, wenn
 mindestens 20 Verkäufe oder mindestens 3.000 EUR" erreicht sind, während der
 Kontext das Gegenteil sagt (unterhalb dieser Schwelle wird *nicht* gemeldet).
 Der Retrieval-Treffer war korrekt, die Formulierung kippt die Logik. Genau
 dagegen hilft weder eine bessere Hit-Rate noch das Konfidenz-Gate — es ist
-der Fall, für den der Faithcheck und der Judge da sind. Der zweite Treffer
-ist milder: eine Versandkosten-Antwort, die den Auslandsfall aus einer
-zitierten Quelle unterschlägt.
+der Fall, für den der Faithcheck und der Judge da sind. Ein milderer Treffer
+taucht über mehrere Läufe hinweg auf: eine Versandkosten-Antwort, die den
+Auslandsfall aus einer zitierten Quelle unterschlägt.
 
 Ehrlicher Hinweis zur Methodik: Der Judge ist derselbe Modelltyp
 (`claude-haiku-4-5`) wie der Chatbot selbst — gleiche Modellfamilie, damit

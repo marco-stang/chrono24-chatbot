@@ -62,6 +62,10 @@ async def rewrite_query(history: list[dict], question: str, client) -> tuple[str
         model=settings.model,
         max_tokens=MAX_REWRITE_TOKENS,
         system=REWRITE_SYSTEM,
+        # Mechanische Umformung, keine Textproduktion: dieselbe Folgefrage muss
+        # dieselbe Standalone-Frage ergeben, sonst wandert das Retrieval
+        # zwischen zwei identischen Anfragen.
+        temperature=0,
         messages=[{"role": "user", "content": build_rewrite_prompt(history, question)}],
     )
     text = next((b.text for b in response.content if b.type == "text"), "").strip()
@@ -80,6 +84,7 @@ async def stream_answer(
         model=settings.model,
         max_tokens=MAX_ANSWER_TOKENS,
         system=SYSTEM_PROMPT,
+        temperature=0,
         messages=messages,
     ) as stream:
         async for text in stream.text_stream:

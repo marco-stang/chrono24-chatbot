@@ -1,125 +1,126 @@
 {
   "summary": {
     "n": 33,
-    "faithful_rate": 1.0,
+    "faithful_rate": 0.9393939393939394,
     "answered_counts": {
       "voll": 27,
       "teilweise": 4,
-      "verweigert": 2
+      "verweigert": 1,
+      "nein": 1
     }
   },
   "results": [
     {
       "question": "Was verrät mir die Referenznummer eigentlich über meine Uhr?",
-      "answer": "Die Referenznummer verrät dir folgende Informationen über deine Uhr:\n\n- Sie **identifiziert eindeutig das Uhrenmodell** [1]\n- Sie bezeichnet **das Modell bzw. die Modellvariante** deiner Uhr [2]\n- Bei manchen Herstellern wie Breitling definiert sie auch **genaue Details wie Uhrenarmband, Art der Schließe und andere Varianten** [1]\n\nDie Referenznummer setzt sich aus mehreren Ziffern und Buchstaben zusammen und ist daher ein präzises Erkennungsmerkmal für deine spezifische Uhr [2].",
+      "answer": "Die Referenznummer verrät dir folgendes über deine Uhr:\n\n- **Eindeutige Identifikation des Uhrenmodells** [1]\n- **Die genaue Modellvariante**, einschließlich Details wie Uhrenarmband und Art der Schließe (besonders bei Herstellern wie Breitling) [1]\n- Sie setzt sich aus **mehreren Ziffern und Buchstaben zusammen** und bezeichnet das Modell bzw. die Modellvariante deiner Uhr [2]\n\nMit der Referenznummer kannst du deine Uhr also präzise identifizieren und unterscheiden, welche spezifische Ausführung eines Modells du besitzt.",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage vollständig: Sie erklärt, dass die Referenznummer das Uhrenmodell identifiziert, die Modellvariante bezeichnet und bei manchen Herstellern spezifische Details wie Armband und Schließe definiert."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend: Die Referenznummer identifiziert das Modell eindeutig, definiert die Modellvariante (Armband, Schließe etc.) und setzt sich aus Ziffern und Buchstaben zusammen."
       }
     },
     {
       "question": "Der Verkäufer meldet sich seit Tagen nicht zurück, was mache ich jetzt?",
-      "answer": "Wenn ein Verkäufer nicht zeitnah antwortet, kann das verschiedene Gründe haben [3]. Chrono24 hat Verkäufer aus unterschiedlichen Ländern, und viele haben an nationalen Feiertagen und zur Urlaubszeit geschlossen. Auch bei erhöhter Nachfrage können Anfragen mit Verzögerung beantwortet werden [3].\n\n**Empfehlungen:**\n- Geben Sie dem Verkäufer Zeit, auf Ihre Nachrichten zu antworten [3]\n- Achten Sie darauf, die Verkäufer in einer der beim Kontaktformular gelisteten Sprachen zu kontaktieren [3]\n\nDazu finde ich nichts in den Chrono24-Hilfeseiten, welche konkreten Schritte du nach einer bestimmten Wartezeit unternehmen kannst. Für weitere Unterstützung solltest du den Chrono24-Support kontaktieren.",
+      "answer": "Wenn ein Verkäufer nicht zeitnah antwortet, kann das verschiedene Gründe haben [4]:\n\n- An nationalen Feiertagen und zur Urlaubszeit haben viele Händler geschlossen\n- Bei erhöhter Nachfrage können Anfragen mit Verzögerung beantwortet werden\n\n**Empfehlungen:**\n- Achten Sie darauf, den Verkäufer in einer der neben dem Kontaktformular gelisteten Sprachen zu kontaktieren\n- Geben Sie ihm Zeit, auf Ihre Nachrichten zu antworten [4]\n\nDazu finde ich nichts in den Chrono24-Hilfeseiten, was du konkret tun kannst, wenn der Verkäufer nach längerer Zeit immer noch nicht antwortet. Kontaktiere in diesem Fall wahrscheinlich den Chrono24-Support.",
       "verdict": {
         "faithful": true,
         "answered": "teilweise",
-        "begruendung": "Die Antwort erklärt korrekt, warum Verkäufer nicht antworten, und gibt die im Kontext genannten Empfehlungen wieder. Sie beantwortet aber nicht vollständig die Frage, was der Käufer konkret tun kann, wenn sich der Verkäufer weiterhin nicht meldet - der Kontext liefert hierzu allerdings auch keine Informationen."
+        "begruendung": "Die Antwort zitiert korrekt aus dem Kontext, beantwortet aber nur teilweise die Frage: Sie erklärt, warum Verkäufer nicht antworten, gibt aber keine konkrete Handlungsanweisung für den Fall, dass sich der Verkäufer 'seit Tagen' nicht meldet, und verweist vage auf den Support statt eine definitive Lösung anzubieten."
       }
     },
     {
       "question": "Woran erkenne ich, dass eine Uhr eine Fälschung sein könnte?",
-      "answer": "Laut den Chrono24-Hilfeseiten kannst du eine mögliche Fälschung an folgenden Punkten erkennen [2]:\n\n- **Verdächtig niedriger Preis**: Luxusuhren von Marken wie Rolex oder Breitling werden üblicherweise nicht für wenige hundert Euro angeboten\n- **Angebot wirkt zu gut, um wahr zu sein**: Wenn dein Bauchgefühl dich warnt, solltest du skeptisch sein\n- **Dein Verdacht zur Authentizität**: Vertrau deinem Instinkt und verzichte im Zweifelsfall auf den Kauf\n\n**Tipp**: Informiere dich schon vor dem Kauf über den tatsächlichen Marktwert der gewünschten Uhr. Wenn Zweifel aufkommen, melde deinen Verdacht über den Link \"Inserat melden\" direkt im Inserat [2].",
+      "answer": "Laut den Chrono24-Hilfeseiten gibt es mehrere Warnsignale für mögliche Fälschungen [2]:\n\n- **Unrealistisch niedriger Preis**: Luxusuhren von Marken wie Rolex oder Breitling werden üblicherweise nicht für wenige hundert Euro angeboten\n- **Zu gutes Angebot**: Wenn ein Angebot zu gut klingt, um wahr zu sein, sollten Sie skeptisch sein\n- **Persönliche Zweifel**: Wenn bei Ihnen Zweifel bezüglich der Authentizität aufkommen, verzichten Sie lieber auf den Kauf\n\n**Tipp**: Informieren Sie sich vor dem Kauf über den tatsächlichen Marktwert der gewünschten Uhr. Falls Sie einen Verdacht haben, können Sie das Inserat über den Link \"Inserat melden\" direkt melden [2].",
       "verdict": {
         "faithful": true,
         "answered": "teilweise",
-        "begruendung": "Der Chatbot gibt die im Kontext erwähnten Erkennungsmerkmale korrekt wieder, beantwortet aber nur, wie man Fälschungen auf Chrono24 vermeidet, nicht wie man eine physische Uhr auf Echtheit prüft - der Kontext enthält dazu keine spezifischen technischen Merkmale."
+        "begruendung": "Der Chatbot beantwortet die Frage basierend auf dem verfügbaren Kontext korrekt und treu, gibt aber nur Hinweise zur Erkennung von verdächtigen Angeboten auf Chrono24, nicht zu objektiven Erkennungsmerkmalen echter vs. gefälschter Uhren selbst."
       }
     },
     {
       "question": "Wie lange dauert der Versand ungefähr und was kostet er mich?",
-      "answer": "Die genauen Versandkosten und Lieferkzeiten sind je nach Verkäufer unterschiedlich:\n\n- **Gewerbliche Händler**: Die Lieferzeit und Versandkosten sind bereits im Inserat angegeben [1]\n- **Privatverkäufer**: Sie erhalten ein Angebot mit diesen Informationen [1]\n- **Verkaufsservice von Chrono24**: Die Versandkosten werden vollständig von Chrono24 übernommen [4]\n\nFür genaue Informationen zu Versand und Kosten kontaktiere den jeweiligen Verkäufer direkt. Bei **Käufen aus dem Ausland** können zusätzliche Kosten wie Zollgebühren und Einfuhrumsatzsteuer anfallen [5].",
+      "answer": "Die **Versandkosten werden vollständig von Chrono24 übernommen** – es fallen für dich keine Kosten an [3].\n\nZur **Lieferdauer**: In vielen Inseraten von gewerblichen Händlern findest du bereits Angaben zur Lieferzeit. Bei Privatverkäufern erhältst du ein Angebot, das diese Informationen enthält [1]. Die genaue Dauer hängt also vom jeweiligen Verkäufer und Inserat ab.",
       "verdict": {
-        "faithful": true,
-        "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage nach Versanddauer und -kosten differenziert nach Verkäufertyp mit korrekten Angaben aus den FAQ-Einträgen."
+        "faithful": false,
+        "answered": "teilweise",
+        "begruendung": "Die Aussage zu Versandkosten ist nicht korrekt: Kontext [3] bezieht sich auf eine spezifische Situation (vermutlich interne Chrono24-Versandkosten), während Kontext [5] zeigt, dass bei Auslandsimporten zusätzliche Versand- und Versicherungskosten anfallen können; die pauschale Aussage 'vollständig von Chrono24 übernommen' ist daher nicht allgemeingültig und irreführend."
       }
     },
     {
       "question": "Bin ich abgesichert, falls meine Uhr beim Transport kaputtgeht oder gestohlen wird?",
-      "answer": "Ja, Sie sind abgesichert, aber es kommt auf die Art des Kaufs an:\n\n**Bei Käufen von Händlern mit Chrono24 Käuferschutz:**\n- Jede Uhr wird über den vollen Wert versichert versendet – auch aus dem Ausland [1]\n- Bei persönlicher Abholung durch UPS oder Abgabe an einem UPS Access Point ist eine Versicherung über den vollen Warenwert kostenlos inbegriffen [2]\n\n**Bei Käufen von Privatpersonen:**\n- Sie sollten die Details zum Versand direkt mit dem Verkäufer besprechen [1]\n- Der Verkäufer sollte eine Versandversicherung wählen, die Wertgegenstände wie Uhren über ihren vollen Wert gegen Beschädigung und Verlust abdeckt [3]",
+      "answer": "Ja, Sie sind abgesichert [1][2][3]:\n\n- **Beim Kauf mit Chrono24 Käuferschutz**: Jede Uhr wird über den vollen Wert versichert versendet – auch aus dem Ausland [1]\n\n- **Bei UPS-Versand**: Eine Versicherung über den vollen Warenwert ist kostenlos inbegriffen, sowohl bei persönlicher Abholung als auch bei Abgabe an einem UPS Access Point [3]\n\n- **Falls die Uhr verloren geht**: Chrono24 kümmert sich um alles Weitere [2]\n\n**Wichtig**: Bei Käufen von Privatpersonen sollten Sie die Versanddetails direkt mit dem Verkäufer besprechen [1]",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage nach Versicherungsschutz bei Transport und Diebstahl differenziert für beide Käufertypen (Händler und Privatperson)."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage zur Absicherung bei Transport und Diebstahl umfassend mit allen relevanten Szenarien."
       }
     },
     {
       "question": "Das Angebot kommt aus dem Ausland - mit welchen zusätzlichen Kosten muss ich rechnen?",
-      "answer": "Bei Käufen aus dem Ausland können folgende **zusätzliche Kosten** anfallen [1]:\n\n- **Zollgebühren**\n- **Steuern**\n- **Versand- und Versicherungskosten**\n\n**Wichtig:** Innerhalb der Europäischen Union ist der Uhrenkauf **zollfrei**. Beim Import aus Drittländern (z. B. USA) in die EU kommen dagegen eine **geringe Zollgebühr** und die **Einfuhrumsatzsteuer** hinzu [1].\n\nDen genauen Preis und die enthaltenen Kosten erfährst du vom **Verkäufer**. Er kann dir auch erklären, ob der Versanddienstleister die Zollformalitäten erledigt. Für landesspezifische Regeln kontaktiere deine **lokale Zollbehörde** [1].",
+      "answer": "Beim Kauf einer Uhr aus dem Ausland können folgende **zusätzliche Kosten** anfallen [1]:\n\n- Zollgebühren\n- Einfuhrumsatzsteuern\n- Versand- und Versicherungskosten\n\n**Wichtig:** Innerhalb der Europäischen Union ist der Uhrenkauf zollfrei. Beim Import aus einem Drittland (z. B. USA) in die EU kommen eine geringe Zollgebühr und die Einfuhrumsatzsteuer hinzu [1].\n\n**Empfehlung:** Kontaktieren Sie den Verkäufer für den genauen Preis und welche Kosten enthalten sind. Er kann Ihnen auch sagen, ob der Versanddienstleister die Zollformalitäten erledigt [1]. Für landesspezifische Regelungen wenden Sie sich an Ihre zuständige Zollbehörde [1][3].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen genannten zusätzlichen Kosten sowie den Unterschieden zwischen EU-Käufen und Importen aus Drittländern."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage nach zusätzlichen Kosten bei Auslandsangeboten umfassend mit konkreten Beispielen und hilfreichen Hinweisen."
       }
     },
     {
       "question": "Ist es riskant, mit Kreditkarte oder PayPal zu bezahlen?",
-      "answer": "Die Bezahlung per Kreditkarte oder PayPal ist nicht grundsätzlich riskant, aber **Chrono24 empfehlt die sichere Zahlung über das Treuhandkonto** [1].\n\nBei Kreditkartenzahlung können Sie selbst zu mehr Sicherheit beitragen [1]:\n- Nutzen Sie eine verschlüsselte Verbindung (https mit Schloss-Symbol)\n- Prüfen Sie regelmäßig Ihre Kreditkartenabrechnung\n- Viele Kartenanbieter haben eine Zero-Liability-Policy, falls Missbrauch stattfindet\n- Kontaktieren Sie bei nicht autorisierten Zahlungen sofort Ihren Kartenanbieter\n\nBei **PayPal** ist wichtig: Zahlen Sie **nicht an \"Freunde und Familie\"**, da Sie dann nicht vom PayPal-Käuferschutz profitieren und Chrono24 Sie nicht unterstützen kann [1].\n\nSicherer ist der **Chrono24 Treuhandservice**: Sie erhalten zuerst die Uhr und der Verkäufer wird erst danach bezahlt [4].",
+      "answer": "Bezahlung per Kreditkarte oder PayPal ist nicht grundsätzlich riskant, wenn Sie einige Sicherheitsmaßnahmen beachten [1]:\n\n- **Verschlüsselte Verbindung nutzen**: Achten Sie auf \"https\" und das Schloss-Symbol in der Adresszeile [1]\n- **Regelmäßig Auszüge prüfen**: Kontrollieren Sie Ihre Kreditkarten-Auszüge [1]\n- **Käuferschutz beachten**: Viele Kreditkartenanbieter haben eine Zero-Liability-Policy, sodass Sie bei Missbrauch nicht haften [1]\n- **PayPal-Zahlungsart beachten**: Zahlen Sie nicht an \"Freunde und Familie\", da Sie dann keinen PayPal-Käuferschutz haben [1]\n\n**Empfehlung**: Chrono24 empfiehlt die **sichere Zahlung über das Treuhandkonto** als beste Alternative [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Sie nennt korrekt die Empfehlung des Treuhandkontos, die Sicherheitsmaßnahmen bei Kreditkarten, die Warnung vor PayPal 'Freunde und Familie' und erklärt den Treuhandservice - alle Aussagen sind im Kontext belegt."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit konkreten Sicherheitsmaßnahmen und der Empfehlung zum Treuhandkonto."
       }
     },
     {
       "question": "Unter welchen Voraussetzungen kann ich eine gekaufte Uhr wieder zurückschicken?",
-      "answer": "Das hängt davon ab, ob du von einem **gewerblichen Händler** oder **privat** gekauft hast [1]:\n\n- **Kauf von gewerblichem Händler**: Du hast ein **gesetzliches Widerrufsrecht von 14 Tagen** nach Erhalt der Uhr. Du erhältst schnell und unkompliziert dein Geld zurück [1].\n\n- **Kauf von privat**: Es gibt **kein gesetzliches Widerrufsrecht** [1].",
+      "answer": "Die Rückgabebedingungen hängen davon ab, von wem du kaufst [2]:\n\n**Kauf von einem gewerblichen Händler:**\n- Du hast ein **gesetzliches Widerrufsrecht von 14 Tagen** nach Erhalt der Uhr [2]\n- Du erhältst schnell und unkompliziert dein Geld zurück [2]\n\n**Kauf von privat:**\n- Es gibt **kein gesetzliches Widerrufsrecht** [2]\n\n**Allgemeine Hinweise:**\n- Informiere dich vor dem Kauf über die **spezifischen Rückgabebedingungen des einzelnen Händlers** [1]\n- Manche Händler akzeptieren Rückgaben nur, wenn Aufkleber und Verpackung im ungeöffneten Originalzustand sind [1]\n- **Wende dich vor der Rücksendung an den Verkäufer**, um den genauen Ablauf zu klären [1]\n- Versende die Uhr nur **versichert** und halte die Rücksendefrist ein [1]",
       "verdict": {
         "faithful": true,
-        "answered": "teilweise",
-        "begruendung": "Die Antwort ist treu zum Kontext, beantwortet aber nur das Widerrufsrecht beim Kauf, nicht die Rückgabe von bereits verkauften Uhren durch den Verkäufer selbst (wie in Quelle [2] erwähnt)."
+        "answered": "voll",
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen relevanten Voraussetzungen für eine Rückgabe."
       }
     },
     {
       "question": "Worin liegt eigentlich der Unterschied zwischen Käuferschutz und Certified?",
-      "answer": "Der **Käuferschutz** und **Certified** sind zwei unterschiedliche Schutzmechanismen:\n\n**Käuferschutz** [1]:\n- Sichert Ihre **Zahlung** ab\n- Geld wird auf Treuhandkonto verwahrt: 14 Tage bei gewerblichen Händlern, 7 Tage bei Privatverkäufern\n- Sie können von Ihrem **Widerrufsrecht** Gebrauch machen (nur bei gewerblichen Händlern)\n- Geld wird erst nach der Verwahrdauer an den Händler ausbezahlt\n\n**Certified** [2]:\n- Zertifiziert die **Echtheit der Uhr** durch verifizierte Uhrmacher\n- Sie erhalten ein **digitales Echtheitszertifikat**\n- Gilt eine **Echtheitsgarantie** für zertifizierte Uhren\n- Bietet ein sorgenfreies Kauferlebnis bezüglich der Echtheit\n\nKurz gesagt: Käuferschutz schützt Ihre Zahlung, Certified bestätigt die Echtheit der Uhr [1].",
+      "answer": "Der **Käuferschutz** und **Certified** sind zwei unterschiedliche Schutzmaßnahmen [1]:\n\n**Käuferschutz** [1]:\n- Sichert Ihre Zahlung ab durch Treuhandverwaltung\n- Bei gewerblichen Händlern: Geld wird 14 Tage nach Erhalt verwahrt\n- Bei Privatverkäufern: Geld wird 7 Tage nach Erhalt verwahrt\n- Ermöglicht Widerrufsrecht (14 Tage bei gewerblichen Händlern)\n\n**Certified** [2]:\n- Ist ein Zertifizierungsservice für die Echtheitsprüfung\n- Verifizierte Uhrmacher prüfen und zertifizieren die Uhr\n- Sie erhalten ein digitales Echtheitszertifikat\n- Gilt eine Echtheitsgarantie für alle Certified-Uhren\n\nKurz gesagt: Der Käuferschutz schützt Ihre Zahlung, während Certified die **Echtheit der Uhr** durch professionelle Prüfung bestätigt [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort beschreibt korrekt die Unterschiede zwischen Käuferschutz (Zahlungsschutz durch Treuhandkonto) und Certified (Echtheitszertifizierung durch Uhrmacher), alle Aussagen sind durch den Kontext gedeckt."
+        "begruendung": "Die Antwort deckt sich vollständig mit dem Kontext: Käuferschutz wird korrekt als Zahlungsschutz mit Treuhandverwaltung beschrieben, Certified als Echtheitszertifizierungsservice mit verifizierten Uhrmachern und Echtheitsgarantie. Alle Aussagen sind durch die Kontextquellen belegt."
       }
     },
     {
       "question": "Können Sie mir kurz erklären, was der Käuferschutz von Chrono24 genau abdeckt?",
-      "answer": "Der **Chrono24 Käuferschutz** bietet dir folgende Sicherheitsleistungen [3]:\n\n- **Zahlung über Treuhandservice** – dein Geld ist geschützt\n- **Echtheitsversprechen** – garantierte Authentizität der Uhr\n- **14 Tage gesetzliches Widerrufsrecht** – du kannst die Uhr zurückgeben\n- **Strenge Händlerrichtlinien** – nur geprüfte Verkäufer\n- **Versicherter Versand** – sichere Lieferung\n- **Quality & Security Team** – professionelle Unterstützung\n\nDer Schutz greift allerdings nur bei Käufen von **Chrono24 Händlern**, nicht bei Privatverkäufern [2]. Der Service ist grundsätzlich **kostenlos** für dich [5].",
+      "answer": "Der **Chrono24 Käuferschutz** deckt folgende Sicherheitsleistungen ab [3]:\n\n- **Zahlung über Treuhandservice** – Ihr Geld ist geschützt\n- **Echtheitsversprechen** – Garantie für Authentizität\n- **14-tägiges gesetzliches Widerrufsrecht** – Rückgaberecht\n- **Strenge Händlerrichtlinien** – Qualitätskontrolle der Verkäufer\n- **Versicherter Versand** – Schutz beim Transport\n- **Quality & Security Team** – Überwachung und Support\n\nDer Schutz greift **nur beim Kauf bei Chrono24 Händlern**, nicht bei Privatverkäufern [2]. Der Käuferschutz ist grundsätzlich **kostenlos** [5].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort deckt alle Komponenten des Käuferschutzes aus dem Kontext ab und erklärt korrekt, für wen er gilt und dass er kostenlos ist."
+        "begruendung": "Die Antwort deckt alle Komponenten des Käuferschutzes korrekt ab, nennt die Bedingungen (nur bei Händlern, nicht Privatverkäufern) und erwähnt die Kostenlosigkeit – alles ist durch den Kontext belegt."
       }
     },
     {
       "question": "Bei welchen Käufen greift der Käuferschutz überhaupt?",
-      "answer": "Der Chrono24 Käuferschutz greift, wenn Sie **eine Uhr bei einem Chrono24 Händler kaufen und die Bestellung über Chrono24 abwickeln** [1]. \n\n**Käufe von Privatverkäufern sind nicht durch den Chrono24 Käuferschutz abgedeckt** [1].",
+      "answer": "Der Chrono24 Käuferschutz greift, wenn Sie **eine Uhr bei einem Chrono24 Händler kaufen und die Bestellung über Chrono24 abwickeln** [1].\n\nKäufe von Privatverkäufern sind **nicht** durch den Chrono24 Käuferschutz abgedeckt [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage korrekt: Der Käuferschutz greift bei Käufen von gewerblichen Händlern über Chrono24, nicht bei Privatverkäufern."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage präzise: Der Käuferschutz greift bei Käufen von gewerblichen Händlern über Chrono24, nicht aber bei Privatverkäufern."
       }
     },
     {
       "question": "Wie stellt Chrono24 sicher, dass die gelisteten Händler auch seriös sind?",
-      "answer": "Chrono24 überprüft alle Händler umfassend im Rahmen der Registrierung [1]. Diese Überprüfung umfasst:\n\n- **Identitäts- und Seriosheitsprüfung** [1]\n- **Gewerbebescheinigung** [1]\n- **Referenzen von anderen Händlern** [1]\n- **Kundenfeedback**, das in die Bewertung einfließt [1]\n\nZusätzlich gibt es für gewerbliche Händler **strenge Händlerrichtlinien** [5], die eingehalten werden müssen. Für Partner-Zertifizierungen werden Händler sogar **sorgfältig ausgewählt** und müssen besonders strikte Richtlinien erfüllen [4].",
+      "answer": "Chrono24 überprüft jeden Händler im Rahmen der Registrierung umfassend auf seine Identität und Seriosität [1]. Diese Überprüfung umfasst:\n\n- Gewerbebescheinigung\n- Referenzen anderer Händler\n- Kundenfeedback, das in die Bewertung einfließt\n\nZusätzlich gelten für alle Händler **strenge Richtlinien**, die als Teil des Chrono24 Käuferschutzes durchgesetzt werden [4].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen relevanten Überprüfungsmechanismen, die Chrono24 zur Sicherung der Seriosität von Händlern einsetzt."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen relevanten Überprüfungsmechanismen, die Chrono24 einsetzt."
       }
     },
     {
       "question": "Wie lösche ich mein Chrono24-Konto endgültig?",
-      "answer": "Um dein Chrono24-Konto endgültig zu löschen, gehe wie folgt vor [1]:\n\n1. Melde dich in deinem **myChrono24 Bereich** an\n2. Gehe zum Menüpunkt **Profil**\n3. Klicke auf **\"Nutzerkonto löschen\"**\n\n**Wichtig:** Bei der Löschung deines Kontos werden auch folgende Daten gelöscht [1]:\n- Deine Wunschliste\n- Deine Watch Collection\n- Deine gespeicherten Suchen\n- Alle deine eigenen Inserate",
+      "answer": "Um dein Chrono24-Konto endgültig zu löschen, gehe wie folgt vor [1]:\n\n- Melde dich in deinem **myChrono24 Bereich** an\n- Gehe zum Menüpunkt **Profil**\n- Klicke auf **\"Nutzerkonto löschen\"**\n\n**Wichtig:** Mit der Löschung deines Kontos werden auch folgende Daten gelöscht [1]:\n- Deine Wunschliste\n- Deine Watch Collection\n- Deine gespeicherten Suchen\n- Alle deine eigenen Inserate",
       "verdict": {
         "faithful": true,
         "answered": "voll",
@@ -128,182 +129,182 @@
     },
     {
       "question": "Muss ich als privater Verkäufer etwas bezahlen, wenn ich meine Uhr verkaufe?",
-      "answer": "Dazu finde ich nichts in den Chrono24-Hilfeseiten. \n\nDer bereitgestellte Kontext beschreibt zwar, dass bei Rückforderung einer unverkauften Uhr **Kosten für Schätzung, Lieferung, Aufbereitung, Zertifizierung, Inseratserstellung und Bewerbung** anfallen [5], doch zur grundsätzlichen Gebührenstruktur beim erfolgreichen Verkauf einer Uhr als Privatverkäufer enthält der Kontext keine Informationen.",
+      "answer": "Dazu finde ich nichts in den Chrono24-Hilfeseiten. Der bereitgestellte Kontext behandelt die Gebühren für Käufer beim Kauf aus dem Ausland, enthält aber keine Informationen zu Gebühren für private Verkäufer auf Chrono24.",
       "verdict": {
         "faithful": true,
         "answered": "verweigert",
-        "begruendung": "Der Chatbot antwortet korrekt ehrlich, dass der Kontext keine Informationen zu Gebühren beim erfolgreichen Verkauf einer Uhr als Privatverkäufer enthält, obwohl er auf relevante Kosten bei Rückforderung hinweist."
+        "begruendung": "Der Chatbot antwortet ehrlich, dass der Kontext keine Informationen zu Gebühren für private Verkäufer enthält, was korrekt ist."
       }
     },
     {
       "question": "Zu welchem Zeitpunkt wird eigentlich die Provision beim Verkauf fällig?",
-      "answer": "Die Verkaufsprovision wird **beim erfolgreichen Verkauf** fällig [4].\n\nDer Zeitpunkt der Fälligkeit hängt von der Zahlungsart ab:\n\n- **Mit Treuhandservice**: Die Provision wird direkt bei der Auszahlung des Verkaufspreises an Sie einbehalten [1][4]\n- **Direktzahlung durch Käufer**: Wir stellen Ihnen die Provision in Rechnung, die Sie innerhalb von **14 Tagen** begleichen müssen [1]",
+      "answer": "Die Verkaufsprovision wird zu unterschiedlichen Zeitpunkten fällig, je nachdem wie der Käufer bezahlt [1]:\n\n- **Mit Treuhandservice**: Die Provision wird direkt bei der Auszahlung des Verkaufspreises an Sie einbehalten [1]\n- **Direktzahlung durch Käufer**: Wir stellen Ihnen die Provision in Rechnung, die Sie innerhalb von **14 Tagen** begleichen müssen [1]\n\nDie Provision beträgt **6,5 % des Verkaufspreises** und wird nur fällig, wenn Sie Ihre Uhr erfolgreich verkaufen [4].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Die Provision wird beim erfolgreichen Verkauf fällig, bei Treuhandservice wird sie direkt einbehalten, bei Direktzahlung wird sie in Rechnung gestellt und muss innerhalb von 14 Tagen bezahlt werden - alles findet sich in den Quellen [1] und [4]."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage nach dem Zeitpunkt der Fälligkeit der Provision korrekt mit beiden Szenarien (Treuhandservice und Direktzahlung) sowie der 14-Tage-Frist."
       }
     },
     {
       "question": "Wie gehe ich vor, um eine Uhr zum Verkauf einzustellen?",
-      "answer": "Um eine Uhr zum Verkauf einzustellen, gehen Sie folgendermaßen vor [1]:\n\n- **Suchen Sie die Uhr**, die Sie verkaufen möchten – Chrono24 füllt dann automatisch einige Merkmale aus\n- **Ergänzen Sie weitere Details** zu Ihrer Uhr\n- **Laden Sie bis zu 20 Bilder** aus verschiedenen Blickwinkeln hoch – achten Sie auf gute Bildqualität und stellen Sie Mängel wie Kratzer transparent dar\n- **Beschreiben Sie die Uhr ausführlich**, um Ihr Inserat attraktiver zu gestalten und Ihre Verkaufschancen zu erhöhen\n- **Registrieren Sie sich als Verkäufer** und hinterlegen Sie Ihre Bankverbindung, damit Ihnen das Geld direkt ausbezahlt werden kann",
+      "answer": "Um eine Uhr zum Verkauf einzustellen, gehen Sie wie folgt vor [1]:\n\n- **Suchen Sie das Modell**, das Sie verkaufen möchten – Chrono24 füllt dann automatisch einige Merkmale aus\n- **Ergänzen Sie weitere Details** zu Ihrer Uhr\n- **Laden Sie bis zu 20 Bilder** aus verschiedenen Blickwinkeln hoch – achten Sie auf gute Bildqualität und zeigen Sie Mängel transparent\n- **Beschreiben Sie Ihre Uhr ausführlich**, um Ihre Verkaufschancen zu erhöhen\n- **Registrieren Sie sich als Verkäufer** und hinterlegen Sie Ihre Bankverbindung für die Auszahlung",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort deckt sich vollständig mit dem Kontext [1] und beantwortet die Frage nach dem Vorgehen zum Einstellung einer Uhr zum Verkauf umfassend und in den richtigen Schritten."
+        "begruendung": "Die Antwort deckt sich vollständig mit dem Kontext [1] und beantwortet die Frage nach dem Vorgehen zum Einstellen einer Uhr zum Verkauf in allen wesentlichen Schritten."
       }
     },
     {
       "question": "Worauf sollte ich beim Verpacken und Versenden meiner verkauften Uhr achten?",
-      "answer": "Beim Verpacken und Versenden Ihrer Uhr sollten Sie folgende Punkte beachten [1][3]:\n\n**Verpackung:**\n- Wählen Sie einen stabilen Versandkarton in passender Größe\n- Nutzen Sie ausreichend Verpackungsmaterial\n- Verpacken Sie die Uhr transportsicher, am einfachsten indem Sie Uhr und Papiere in die dafür vorgesehenen Fächer der Box legen und diese in einem passenden Paket verpacken [3]\n\n**Adresse:**\n- Lassen Sie sich die Lieferadresse des Käufers vorab bestätigen\n- Bringen Sie die Adresse gut lesbar am Versandkarton an [1]\n\n**Versicherung:**\n- Informieren Sie sich vor dem Versand über die Versandversicherung\n- Diese muss Wertgegenstände wie Uhren über ihren vollen Wert gegen Beschädigung und Verlust abdecken [1]\n\n**Tracking:**\n- Wählen Sie eine Versandart mit Sendungsverfolgung\n- Teilen Sie dem Käufer nach dem Versand die Tracking-ID mit [1]",
+      "answer": "Beim Verpacken und Versenden Ihrer Uhr sollten Sie folgende Punkte beachten [1][4]:\n\n**Verpackung:**\n- Wählen Sie einen stabilen Versandkarton in passender Größe\n- Nutzen Sie ausreichend Verpackungsmaterial\n- Am einfachsten: Legen Sie Uhr und Papiere in die dafür vorgesehenen Fächer der Box und verpacken diese in einem passenden Paket\n\n**Adresse:**\n- Lassen Sie sich die Lieferadresse des Käufers vorab bestätigen\n- Bringen Sie die Adresse gut lesbar am Versandkarton an\n\n**Versicherung:**\n- Informieren Sie sich vor dem Versand über die Versandversicherung\n- Diese muss Wertgegenstände wie Uhren über ihren vollen Wert gegen Beschädigung und Verlust abdecken\n\n**Tracking:**\n- Wählen Sie eine Versandart mit Sendungsverfolgung\n- Teilen Sie dem Käufer nach dem Versand die Tracking-ID mit",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet alle wichtigen Aspekte zum Verpacken und Versenden einer Uhr mit korrekten Zitaten aus den Hilfeseiten."
+        "begruendung": "Die Antwort deckt alle wichtigen Punkte zum Verpacken und Versenden aus den Kontextquellen [1] und [4] ab und enthält keine erfundenen oder nicht belegten Aussagen."
       }
     },
     {
       "question": "Wie hoch ist die Gebühr, wenn Chrono24 meine Uhr in Kommission verkauft?",
-      "answer": "Bei einem erfolgreichen Kommissionsverkauf durch Chrono24 beträgt die **Provision 6,5 % des Verkaufspreises** [2]. Diese Provision wird nur fällig, wenn Ihre Uhr tatsächlich verkauft wird und wird direkt bei der Auszahlung des Verkaufspreises an Sie einbehalten [2].\n\nZusätzlich können Sie für Uhren bestimmter Marken ab 5.000 € Verkaufspreis optional **Chrono24 Certified für 249 €** hinzubuchen, um eine professionelle Zertifizierung durch hauseigene Uhrmacher zu erhalten [1].",
+      "answer": "Die Kommission liegt zwischen **13 % und 19 %** und ist abhängig von Marke sowie Modell Ihrer Uhr. Die exakte Verkaufsgebühr finden Sie in dem Vertrag, den Chrono24 Ihnen zusammen mit dem Angebot zuschickt. [3]",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort gibt korrekt die Kommissions-Gebühr von 6,5% an und erwähnt auch die optionale Zertifizierungsgebühr, beide sind vollständig durch den Kontext belegt."
+        "begruendung": "Die Antwort ist vollständig durch Kontext [3] gedeckt und beantwortet die Frage nach der Kommissionsgebühr korrekt und vollständig."
       }
     },
     {
       "question": "Was muss ich tun, um mich als gewerblicher Verkäufer anzumelden?",
-      "answer": "Um dich als gewerblicher Händler auf Chrono24 anzumelden, folge diesen Schritten [1]:\n\n- Trage deine persönlichen Daten ein\n- Hinterlege deine Zahlungsdaten (Kreditkarte oder SEPA-Lastschrift)\n- Übermittle deine Verifizierungsdokumente\n\n**Wichtig:** Bevor deine Inserate veröffentlicht werden, muss dein Händlerkonto von Chrono24 freigeschaltet werden. Dafür musst du folgende Dokumente per Upload, E-Mail, Fax oder Post einreichen [1]:\n\n- Handelsregisterauszug oder Gewerbeanmeldung\n- Adressnachweis (z.B. Telefonrechnung, Stromabrechnung)\n\nDu kannst bereits während der **30-tägigen kostenlosen Testphase** Uhren inserieren. Eine Verkaufsprovision fällt nur bei erfolgreichen Verkäufen an [1].",
+      "answer": "Um dich als gewerblicher Händler auf Chrono24 anzumelden, musst du folgende Schritte durchführen [1]:\n\n- Trage deine persönlichen Daten ein\n- Hinterlege deine Zahlungsdaten (Kreditkarte oder SEPA-Lastschrift)\n- Übermittle Verifizierungsdokumente\n\nDanach kannst du bereits Inserate hochladen. Bevor diese veröffentlicht werden, muss dein Händlerkonto von Chrono24 freigeschaltet werden. Dafür benötigt Chrono24 Kopien von [1]:\n\n- Handelsregisterauszug oder Gewerbeanmeldung\n- Adressnachweis (Telefonrechnung, Stromabrechnung o.ä.)\n\nDiese Dokumente kannst du per Upload, E-Mail, Fax oder Post einreichen. Du kannst eine **30-tägige Testphase** nutzen, um deine Uhren kostenlos zu inserieren – eine Verkaufsprovision fällt nur bei erfolgreichen Verkäufen an [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort deckt sich vollständig mit dem Kontext [1] und beantwortet die Frage umfassend: alle erforderlichen Schritte zur Anmeldung, notwendige Dokumente und die Testphase werden korrekt dargestellt."
+        "begruendung": "Die Antwort deckt sich vollständig mit dem Kontext [1] und beantwortet die Frage nach den Anmeldungsschritten für gewerbliche Verkäufer umfassend und korrekt."
       }
     },
     {
       "question": "Werden meine persönlichen Daten bei Chrono24 ausreichend geschützt?",
-      "answer": "Ja, Chrono24 schützt Ihre persönlichen Daten ausreichend [1]. Das Unternehmen setzt **modernste Sicherheitstechnik** ein, um Ihre Daten gegen Manipulation, Verlust und unbefugten Zugriff zu schützen [1].\n\nKonkret werden Ihre Daten:\n- **verschlüsselt übertragen** (SSL) [3]\n- über eine **sichere Internetverbindung (HTTPS)** übertragen [3]\n- nach **hohen Sicherheitsstandards** behandelt [2]\n\nChrono24 hält sich zudem strikt an die geltenden **Datenschutzgesetze** [3]. Weitere Details zum Datenschutz finden Sie in den Datenschutzbestimmungen von Chrono24.",
+      "answer": "Ja, Chrono24 schützt Ihre persönlichen Daten umfassend [1]:\n\n- **Moderne Sicherheitstechnik** wird eingesetzt, um Ihre Daten gegen Manipulation, Verlust und unbefugten Zugriff zu schützen [1]\n- **Verschlüsselte Übertragung** aller Daten über SSL und sichere HTTPS-Verbindungen [3]\n- **Strikte Einhaltung** der geltenden Datenschutzgesetze [3]\n- **Hohe Sicherheitsstandards** als Teil des umfassenden Sicherheitskonzepts [2]\n\nWeitere Details finden Sie in den Datenschutzbestimmungen von Chrono24.",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Alle Aussagen zu Sicherheitstechnik, Verschlüsselung, HTTPS, Sicherheitsstandards und Datenschutzgesetze werden durch die angegebenen Quellen [1], [2] und [3] belegt."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage nach dem Schutz persönlicher Daten bei Chrono24 umfassend mit konkreten Maßnahmen aus den Quellen [1], [2] und [3]."
       }
     },
     {
       "question": "Was hat es mit DAC 7 auf sich?",
-      "answer": "DAC 7 ist die **EU-Richtlinie 2021/514**, die am 1. Januar 2023 in Kraft getreten ist [4]. Die Abkürzung \"DAC\" steht für \"Directive on Administrative Cooperation\" [2].\n\nFür Chrono24 bedeutet dies: Als Marktplatz sind wir verpflichtet, dem deutschen **Bundeszentralamt für Steuern (BZSt) Informationen zu den Einkünften von Verkäufern** auf unserer Plattform zu melden [1]. Dabei übermitteln wir auch Ihre **Steuer-Identifikationsnummer** [1].\n\nKonkret werden folgende Daten jährlich gemeldet [3]:\n- Ihr Vor- und Nachname, Anschrift, Geburtsdatum\n- Ihre Steuer-Identifikationsnummer(n)\n- Gebühren, Provisionen und die Gesamtvergütung (quartalsweise aufgeschlüsselt)\n- Die Zahl der Verkäufe im Meldezeitraum\n\nDas BZSt leitet diese Daten dann an die zuständigen Finanzbehörden weiter [3].",
+      "answer": "DAC 7 ist die **neue EU-Richtlinie 2021/514**, die am 1. Januar 2023 in Kraft getreten ist [4]. Die Abkürzung \"DAC\" steht für \"Directive on Administrative Cooperation\" [2].\n\nAls Marktplatz ist Chrono24 durch diese Richtlinie verpflichtet [1]:\n\n- Dem deutschen Bundeszentralamt für Steuern (BZSt) Auskunft zu **Einkünften der Verkäufer** auf der Plattform zu geben\n- Die **Steuer-Identifikationsnummern** der Verkäufer zu übermitteln\n- Jährlich personenbezogene Daten wie Name, Anschrift, Geburtsdatum und weitere Informationen zu Gebühren, Provisionen und Vergütungen an das BZSt zu melden [3]\n\nDas BZSt leitet diese Daten anschließend an die zuständigen Finanzbehörden im In- und Ausland weiter [3]. **Sobald Sie Uhren auf Chrono24 verkaufen, gelten Sie als meldepflichtiger Anbieter** [3].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext belegt: DAC 7 als EU-Richtlinie 2021/514, Inkrafttreten am 1. Januar 2023, Bedeutung der Abkürzung, Verpflichtung zur Meldung an BZSt, übermittelte Daten und Weitergabe an Finanzbehörden sind alle im Kontext dokumentiert."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend: Sie erklärt, was DAC 7 ist, was die Abkürzung bedeutet, welche Verpflichtungen Chrono24 hat, welche Daten übermittelt werden, und wer als meldepflichtiger Anbieter gilt."
       }
     },
     {
       "question": "Gibt es für Verkäufe nach Frankreich eine besondere Meldepflicht?",
-      "answer": "Ja, es gibt eine besondere Meldepflicht für Verkäufe nach Frankreich [2]. Chrono24 ist gemäß französischem Gesetz zur Betrugsbekämpfung verpflichtet, Verkäufe an die französischen Steuerbehörden zu melden, wenn eines dieser Kriterien erfüllt ist [2]:\n\n- Der Versand erfolgte an eine französische Adresse\n- Der Versand erfolgte von einer französischen Adresse\n- Der Verkäufer ist in Frankreich ansässig oder besitzt dort eine Geschäftsadresse\n\nBei der Meldung werden folgende Informationen übermittelt: Steuer-Identifikationsnummer, EU-Umsatzsteuer-Identifikationsnummer oder SIREN/SIRET, Ihr deklarierter Status und die Anzahl sowie der Gesamtumsatz Ihrer Transaktionen mit Frankreichsbezug [1].\n\nEs gibt eine **Mindestschwelle**: Wenn Sie im Jahr weniger als 20 Verkäufe tätigen oder weniger als 3.000 EUR umsetzen, werden diese Verkäufe nicht gemeldet [1].",
+      "answer": "Ja, es gibt eine besondere Meldepflicht für Verkäufe nach Frankreich [3]. Chrono24 ist verpflichtet, Verkäufe an die französischen Steuerbehörden zu melden, wenn eines dieser Kriterien erfüllt ist [2]:\n\n- Der Versand erfolgte an eine französische Adresse\n- Der Versand erfolgte von einer französischen Adresse\n- Der Verkäufer ist in Frankreich ansässig oder besitzt dort eine Geschäftsadresse\n\nEs gibt allerdings eine **Mindestschwelle**: Wenn im Jahr weniger als 20 Verkäufe getätigt oder weniger als 3.000 EUR umgesetzt wurden, werden diese Verkäufe nicht an die französische Behörde gemeldet [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort beantwortet die Frage vollständig und alle Aussagen sind durch den Kontext belegt: Es gibt eine Meldepflicht für Verkäufe nach Frankreich, die Kriterien sind korrekt dargestellt, die gemeldeten Informationen sind aufgelistet, und die Mindestschwelle wird korrekt angegeben."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit den drei Meldungskriterien und der Mindestschwelle."
       }
     },
     {
       "question": "What exactly is the Certified program on Chrono24?",
-      "answer": "Dazu finde ich nichts in den Chrono24-Hilfeseiten. \n\nDer bereitgestellte Kontext erklärt, wie das Programm **funktioniert** (Ablauf, Prüfung, Kosten), aber nicht, was es grundsätzlich **ist** oder welcher Zweck dahinter steckt. Um eine vollständige Definition des Certified-Programms zu erhalten, müsstest du andere Hilfeseiten von Chrono24 konsultieren.",
+      "answer": "Dazu finde ich nichts in den Chrono24-Hilfeseiten. \n\nDer bereitgestellte Kontext erklärt, wie das Certified-Programm **funktioniert** und was es **kostet**, aber nicht, was es grundsätzlich ist oder welchem Zweck es dient. Ich kann dir nur sagen, dass:\n\n- Chrono24-Certified-Uhren von hauseigenen Uhrmachern geprüft und zertifiziert werden [1]\n- Die Zertifizierung eine **Echtheitsprüfung und Funktionsprüfung** umfasst [1]\n- Du ein **digitales Echtheitszertifikat mit Echtheitsgarantie** erhältst [1]\n- Der Aufpreis **249 €** beträgt [5]",
       "verdict": {
-        "faithful": true,
-        "answered": "verweigert",
-        "begruendung": "Der Chatbot lehnt ehrlich ab, da der Kontext zwar Details zum Ablauf und zu Features des Programms enthält, aber keine explizite Definition oder Erklärung des Programms selbst bietet."
+        "faithful": false,
+        "answered": "nein",
+        "begruendung": "Der Chatbot behauptet, nichts zu finden, obwohl der Kontext ausreichend Informationen zur Beantwortung der Frage enthält (Echtheitsprüfung, Funktionsprüfung, digitales Zertifikat, Echtheitsgarantie), und widerlegt sich dann selbst durch detaillierte Angaben."
       }
     },
     {
       "question": "How much do I have to pay for Partner Certified?",
-      "answer": "Die Partner Certified Zertifizierung ist **kostenlos** für Sie [3]. Die Uhr wurde bereits von einem verifizierten Uhrmacher zertifiziert, der für den Verkäufer arbeitet [3].",
+      "answer": "Die Partner Certified Zertifizierung ist **kostenlos** für Sie. Die Uhr wurde bereits von einem verifizierten Uhrmacher zertifiziert, der für den Verkäufer arbeitet, bevor Sie sie kaufen [3].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage korrekt: Partner Certified ist kostenlos und wurde bereits vor dem Kauf zertifiziert."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Quelle [3] bestätigt explizit, dass Partner Certified kostenlos ist, und die Erklärung zur vorherigen Zertifizierung durch einen verifizierten Uhrmacher des Verkäufers wird ebenfalls durch den Kontext gestützt."
       }
     },
     {
       "question": "What's the best way to reach out to a seller about their watch?",
-      "answer": "Um einen Verkäufer zu kontaktieren, haben Sie folgende Möglichkeiten [1]:\n\n- **\"Verkäufer kontaktieren\"-Button** auf der Inseratsseite nutzen – der Verkäufer erhält Ihre Nachricht per E-Mail [1]\n- **\"Preis vorschlagen\"-Button** klicken, um einen Preisvorschlag zu senden (bei vielen Verkäufern verfügbar) [1]\n- **\"Fragen zum Inserat\"-Button** nutzen – hier sind die Antworten öffentlich einsehbar für alle Chrono24-Nutzer [1]\n- **Telefonisch** den Verkäufer direkt kontaktieren [2]\n\nDie durchschnittliche Antwortzeit wird Ihnen angezeigt, allerdings können wir keine genauen Angaben zum genauen Zeitpunkt der Beantwortung machen [1].",
+      "answer": "Um einen Verkäufer am besten zu kontaktieren, nutzen Sie folgende Möglichkeiten [1]:\n\n- Klicken Sie auf **\"Verkäufer kontaktieren\"**, um Ihre Fragen rund ums Inserat zu stellen\n- Bei manchen Uhren können Sie über **\"Preis vorschlagen\"** einen Preisvorschlag senden\n- Nutzen Sie **\"Fragen zum Inserat\"**, wenn dieser Button verfügbar ist – die Antworten sind dann öffentlich einsehbar\n\nDer Verkäufer erhält Ihre Nachricht immer per E-Mail. Beachten Sie: Kontaktieren Sie den Verkäufer in einer der neben dem Kontaktformular gelisteten Sprachen und geben Sie ihm Zeit zu antworten, da Verkäufer international tätig sind und unterschiedliche Reaktionszeiten haben können [4].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen verfügbaren Kontaktmöglichkeiten und relevanten Details zu Antwortzeiten."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage umfassend mit allen relevanten Kontaktmöglichkeiten und wichtigen Hinweisen."
       }
     },
     {
       "question": "Wie läuft die Bezahlung über den Treuhandservice beim Kauf von einer Privatperson ab?",
-      "answer": "Beim Kauf von einer Privatperson über den Chrono24 Treuhandservice läuft die Bezahlung wie folgt ab [1][4]:\n\n- Sie zahlen den Kaufpreis auf das **Chrono24 Treuhandkonto** ein, wo das Geld sicher verwahrt bleibt\n- Der Verkäufer versendet die Uhr erst nach dieser Zahlung [2]\n- **Sie erhalten zuerst die Uhr** und können sie überprüfen\n- Erst danach wird der Kaufpreis an den Verkäufer ausgezahlt [1]\n\nDas Chrono24 Support Team **steht Ihnen jederzeit zur Seite** und unterstützt Sie und den Verkäufer bei der Einigung, falls etwas nicht wie vereinbart läuft [1][4].",
+      "answer": "Beim Kauf von einer Privatperson über den Chrono24 Treuhandservice läuft die Bezahlung so ab [1][4]:\n\n- Sie überweisen den Kaufpreis auf das **Chrono24 Treuhandkonto**\n- Das Geld wird dort **sicher verwahrt**, bis Sie die Uhr erhalten\n- Sie erhalten **zuerst die gekaufte Uhr**\n- **Anschließend wird der Kaufpreis an den Verkäufer ausgezahlt** [1]\n\nDas Chrono24 Support Team steht Ihnen jederzeit zur Seite und unterstützt Sie und den Verkäufer, falls etwas nicht so läuft wie vereinbart [1][4].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort beschreibt den Ablauf des Treuhandservice beim Kauf von einer Privatperson korrekt und vollständig: Zahlung auf Treuhandkonto, Versand durch Verkäufer, Erhalt und Überprüfung durch Käufer, anschließende Auszahlung an Verkäufer, sowie Support-Unterstützung. Alle Aussagen sind durch den Kontext belegt."
+        "begruendung": "Die Antwort beschreibt den Ablauf des Treuhandservice beim Kauf von Privatpersonen korrekt und vollständig anhand des Kontexts: Überweisung auf Treuhandkonto, sichere Verwahrung, Erhalt der Uhr vor Auszahlung an Verkäufer, und Support-Unterstützung."
       }
     },
     {
       "question": "Lässt sich die Chrono24-Webseite komplett ohne Maus, nur über die Tastatur, bedienen?",
-      "answer": "Ja, die Chrono24-Webseite lässt sich **vollständig über die Tastatur navigieren**. Das ist besonders hilfreich für Nutzer, die keine Maus verwenden können. [1]",
+      "answer": "Ja, die Chrono24-Webseite kann **vollständig über die Tastatur navigiert werden**. Das ist besonders hilfreich für Nutzer, die keine Maus verwenden können [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext [1] gedeckt, der explizit aussagt, dass die Website vollständig über die Tastatur navigiert werden kann."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Der erste Kontext-Abschnitt besagt explizit, dass die Website vollständig über die Tastatur navigiert werden kann und dies besonders hilfreich für Nutzer ist, die keine Maus verwenden können."
       }
     },
     {
       "question": "Kann ich einfach ein Foto von einer Uhr machen, um herauszufinden, welches Modell das ist?",
-      "answer": "Ja, das ist möglich! Mit dem **Watch Scanner** in der Chrono24 App können Sie ein Foto einer Uhr machen und das Modell automatisch erkennen lassen. Der Watch Scanner erkennt **15.000 Uhren** anhand nur eines Fotos [3]. Sie können die Uhr in verschiedensten Situationen fotografieren – am Handgelenk, im Schaufenster oder aus einem Magazin [1]. So erhalten Sie nicht nur das Modell, sondern auch **Modellinfos und den aktuellen Marktwert** [1].",
+      "answer": "Ja, das ist möglich! Mit dem **Watch Scanner** in der Chrono24 App können Sie ein Foto einer Uhr machen und das Modell automatisch erkennen lassen [1][2]. Der Watch Scanner erkennt **15.000 Uhren** anhand nur eines Fotos [3]. Sie können die Uhr in verschiedensten Situationen fotografieren – am Handgelenk, im Schaufenster oder aus einem Magazin [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Watch Scanner existiert, erkennt 15.000 Uhren anhand eines Fotos, kann in verschiedenen Situationen fotografiert werden und liefert Modellinfos sowie Marktwert - alles belegt durch die Quellen [1] und [3]."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Der Watch Scanner erkennt Uhren anhand von Fotos, es werden 15.000 Uhren erkannt, und die verschiedenen Fotografiersituationen sind alle im Kontext belegt."
       }
     },
     {
       "question": "Was genau bedeutet der Zustand 'Sehr gut' bei einer gebraucht angebotenen Uhr?",
-      "answer": "Der Zustand **\"Sehr gut\"** bei einer gebrauchten Uhr bedeutet [1]:\n\n- Die Uhr hat **leichte Gebrauchsspuren**, wie wenige leichte Kratzer, die jedoch nicht spürbar sind\n- Das Gehäuse hat **makellose Fasen und Kanten**\n- Das Armband kann leicht gedehnt sein\n- **Punzen und Gravuren sind deutlich sichtbar und nicht abgenutzt**\n- Die Uhr kann professionell poliert worden sein, ohne dass Konturen oder Kanten beeinträchtigt wurden",
+      "answer": "Der Zustand **\"Sehr gut\"** bei einer gebrauchten Uhr bedeutet [1]:\n\n- Die Uhr hat **leichte Gebrauchsspuren**, wie z. B. wenige leichte Kratzer, die jedoch nicht spürbar sind\n- Das Gehäuse hat **makellose Fasen und Kanten**\n- Das Armband kann leicht gedehnt sein\n- **Punzen und Gravuren sind deutlich sichtbar und nicht abgenutzt**\n- Die Uhr kann professionell poliert worden sein, ohne dass Konturen oder Kanten beeinträchtigt wurden",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext [1] gedeckt und beantwortet die Frage präzise mit allen Merkmalen des Zustands 'Sehr gut'."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext [1] gedeckt und beantwortet die Frage nach der genauen Bedeutung des Zustands 'Sehr gut' vollständig mit allen relevanten Kriterien."
       }
     },
     {
       "question": "Worauf muss ich als Verkäufer achten, bevor ich die Uhr nach einer Überweisung verschicke?",
-      "answer": "Als Verkäufer solltest du vor dem Versand nach einer Überweisung folgende Punkte beachten [5]:\n\n- **Prüfe den Zahlungseingang in deinem eigenen Bankkonto**, bevor du die Uhr versendest\n- Verlasse dich **nur auf Informationen deiner eigenen Bank** – nicht auf angebliche Bestätigungsmails\n- **Vertraue nicht auf Schreiben fremder Bankinstitute**, die dich zum Versand auffordern\n- Kontrolliere stets selbst, ob das Geld tatsächlich auf deinem Konto eingegangen ist",
+      "answer": "Als Verkäufer solltest du vor dem Versand folgende Punkte beachten [2]:\n\n- **Verpackung**: Nutze einen stabilen Versandkarton in passender Größe mit ausreichend Verpackungsmaterial\n- **Adresse**: Lass dir die Lieferadresse vom Käufer vorab bestätigen und bringe sie gut lesbar am Karton an\n- **Versicherung**: Informiere dich über eine Versandversicherung, die Wertgegenstände wie Uhren über ihren vollen Wert gegen Beschädigung und Verlust abdeckt\n- **Tracking**: Wähle eine Versandart mit Sendungsverfolgung und teile dem Käufer die Tracking-ID mit\n\nGenerell empfiehlt Chrono24 jedoch, den **sicheren Chrono24 Treuhandservice** zu nutzen, bei dem der Käufer erst zahlt, nachdem er die Uhr erhalten und überprüft hat [1].",
       "verdict": {
         "faithful": true,
         "answered": "teilweise",
-        "begruendung": "Die Antwort ist vollständig durch Kontext [5] gedeckt, beantwortet aber nur die Zahlungsprüfung vor dem Versand und nicht weitere relevante Versandvorbereitungen, die in Kontext [1] aufgelistet sind (Verpackung, Adresse bestätigen, Versicherung, Tracking)."
+        "begruendung": "Die Antwort gibt korrekt wieder, worauf Verkäufer beim Versand achten müssen, beantwortet aber nicht die spezifische Frage, worauf man achten muss, BEVOR man die Uhr nach einer Überweisung verschickt (z.B. Zahlungsbestätigung prüfen), sondern nur allgemeine Versandrichtlinien."
       }
     },
     {
       "question": "Was ist eine Kalenderuhr mit Jahresanzeige?",
-      "answer": "Eine **Kalenderuhr mit Jahresanzeige** ist eine Uhr mit Kalenderanzeige, bei der **das aktuelle Jahr auf dem Zifferblatt angezeigt wird** [1].\n\nDie Jahresanzeige ist eine Variante der Kalenderuhr und gehört zu den verschiedenen Möglichkeiten, Uhren mit Kalenderfunktionen auszustatten [1].",
+      "answer": "Eine **Kalenderuhr mit Jahresanzeige** ist eine Uhr mit Kalenderanzeige, bei der das **aktuelle Jahr auf dem Zifferblatt angezeigt wird** [1].\n\nDie Jahresanzeige ist eine von mehreren möglichen Varianten von Kalenderuhren. Andere Varianten sind beispielsweise die Datumsanzeige, Day-Date-Anzeige oder der Ewige Kalender [1].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage korrekt: Eine Kalenderuhr mit Jahresanzeige ist eine Uhr mit Kalenderanzeige, die das aktuelle Jahr auf dem Zifferblatt anzeigt, genau wie im Lexikon-Eintrag beschrieben."
+        "begruendung": "Die Antwort definiert korrekt, dass eine Kalenderuhr mit Jahresanzeige eine Uhr mit Kalenderanzeige ist, bei der das aktuelle Jahr auf dem Zifferblatt angezeigt wird, und nennt weitere Varianten - alles ist durch den Kontext [1] belegt."
       }
     },
     {
       "question": "Kann ich in meiner Watch Collection auch Uhren sammeln, die mir gar nicht gehören?",
-      "answer": "Ja, das ist möglich. Sie können auch Uhren beobachten, die Sie noch nicht besitzen. Geben Sie hierzu einfach die Referenznummer oder Marke, Modell und Zustand der Uhr an und wählen Sie die Option **\"Ich besitze diese Uhr nicht\"**. So können Sie die Wertentwicklung von Uhren verfolgen, die Sie interessieren [1][3].",
+      "answer": "Ja, das ist möglich. Sie können auch Uhren beobachten, die Sie nicht besitzen [3]. Geben Sie dazu die Referenznummer oder Marke, Modell und Zustand der Uhr an und wählen Sie die Option \"Ich besitze diese Uhr nicht\". So können Sie die Wertentwicklung von Uhren verfolgen, die Sie interessieren [3].",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage korrekt: Man kann Uhren zur Watch Collection hinzufügen, die man nicht besitzt, indem man die Option 'Ich besitze diese Uhr nicht' wählt."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet die Frage vollständig: Man kann Uhren zur Watch Collection hinzufügen, die man nicht besitzt, indem man die Option 'Ich besitze diese Uhr nicht' wählt."
       }
     },
     {
       "question": "Wie merke ich mir Uhren, die mir gefallen, und werde informiert, wenn sich der Preis ändert?",
-      "answer": "Du kannst dir gefallende Uhren auf zwei Wegen merken und bei Preisänderungen informiert werden:\n\n**Wunschliste** [3]\n- Speichere interessante Inserate als registrierter Nutzer auf deiner Wunschliste\n- Du wirst automatisch benachrichtigt, wenn sich der Preis ändert\n\n**Preisalarm über die App** [1] [4]\n- Nutze die Chrono24 App für Android oder iOS\n- Erhalte eine Benachrichtigung, sobald sich der Preis deiner Wunschuhr ändert",
+      "answer": "Du kannst interessante Uhren auf deiner **Wunschliste** speichern und wirst automatisch benachrichtigt, wenn sich der Preis ändert [2]. \n\nMit der Chrono24 App oder als registrierter Nutzer hast du folgende Möglichkeiten [1]:\n\n- **Wunschliste** – Behalte interessante Uhren immer im Blick\n- **Preisalarm** – Erhalte eine Benachrichtigung, sobald sich der Preis deiner Wunschuhr ändert\n- **Gespeicherte Suche** – Werde informiert, wenn es neue Treffer zu deinen favorisierten Modellen gibt",
       "verdict": {
         "faithful": true,
         "answered": "voll",
-        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt: Die Wunschliste und der Preisalarm werden korrekt als zwei Wege beschrieben, um Uhren zu merken und bei Preisänderungen benachrichtigt zu werden. Alle Aussagen sind durch die zitierten Quellen belegt."
+        "begruendung": "Die Antwort ist vollständig durch den Kontext gedeckt und beantwortet beide Teile der Frage: Wie man Uhren speichert (Wunschliste) und wie man über Preisänderungen informiert wird (Preisalarm)."
       }
     }
   ]

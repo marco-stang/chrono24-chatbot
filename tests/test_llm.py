@@ -1,4 +1,4 @@
-from app.llm import build_context, build_rewrite_prompt, rewrite_query
+from app.llm import build_context, build_rewrite_prompt, rewrite_query, stream_answer
 from app.retrieval import RetrievedDoc
 
 DOCS = [
@@ -71,3 +71,76 @@ async def test_rewrite_query_translates_english_first_question():
     result, tokens = await rewrite_query([], "How do I sell a watch on Chrono24?", client=FakeClient())
     assert result == "Wie verkaufe ich eine Uhr auf Chrono24?"
     assert tokens == 95
+
+
+class RecordingMessages:
+    def __init__(self):
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return FakeResponse("Wie verkaufe ich eine Uhr auf Chrono24?")
+
+
+class RecordingClient:
+    def __init__(self):
+        self.messages = RecordingMessages()
+
+
+async def test_rewrite_query_pins_temperature_to_zero():
+    """Das Umschreiben ist eine mechanische Umformung, keine Textproduktion --
+    dieselbe Folgefrage muss dieselbe Standalone-Frage ergeben, sonst wandert
+    das Retrieval zwischen zwei identischen Anfragen."""
+    client = RecordingClient()
+    await rewrite_query([{"role": "user", "content": "Wie kaufe ich eine Uhr?"}],
+                        "und beim Verkauf?", client=client)
+    assert client.messages.calls[0]["temperature"] == 0
+
+
+class _TextStream:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def __aiter__(self):
+        async def gen():
+            for c in self._chunks:
+                yield c
+        return gen()
+
+
+class FakeStream:
+    def __init__(self, chunks):
+        self._chunks = chunks
+        self.text_stream = _TextStream(chunks)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get_final_message(self):
+        return FakeResponse("".join(self._chunks))
+
+
+class RecordingStreamMessages:
+    def __init__(self):
+        self.calls = []
+
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        return FakeStream(["Antwort."])
+
+
+class RecordingStreamClient:
+    def __init__(self):
+        self.messages = RecordingStreamMessages()
+
+
+async def test_stream_answer_pins_temperature_to_zero():
+    """Ein Bot, dessen Verkaufsargument Belegbarkeit ist, hat keinen Grund, seine
+    Antworten zu wuerfeln. Ohne diese Zeile laeuft er auf dem API-Default 1.0."""
+    client = RecordingStreamClient()
+    async for _ in stream_answer("Frage?", [], [], client):
+        pass
+    assert client.messages.calls[0]["temperature"] == 0
