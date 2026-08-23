@@ -99,6 +99,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | + handkuratierte Synonym-Expansion der Query (nur BM25-Pfad) | **91 % (30/33)** |
 | + Query-Varianten (LLM-Umformulierungen, nur Embedding-Pfad) | 91 % (30/33) |
 | verworfen: Titel-Exaktheits-Bonus auf den Rerank-Score (α = 0.5–4) | 88 % → 85 % |
+| verworfen: Seitentitel zusätzlich ins `page_chunk`-Embedding | 91 % → 88 % |
+| verworfen: FAQ-Kategorie in den Rerank-Text | 91 % (30/33), exakt neutral |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -157,6 +159,26 @@ nicht nachträglich zu tunen. Nachgemessen: Tuning unverändert **91 %
 zusätzlicher Treffer auf 15 Fragen ist ein kleines Sample und kein Beweis
 für einen großen Effekt, aber es ist der erste tatsächlich positive Befund
 der Varianten — vorher hat der Bug jeden echten Gewinn verdeckt.
+
+Zwei weitere Kandidaten wurden im selben Zug gemessen und beide verworfen.
+Der **Seitentitel zusätzlich im `page_chunk`-Embedding** (statt nur der
+Überschrift) sollte generischen Überschriften wie „Ablauf" den fehlenden
+Kontext geben. Gemessen: Tuning 91 % → 88 %, Held-out 93 % → 87 %. Die
+Ursache steht im Indexer-Log: der Titel ist bei allen Chunks derselben
+Seite identisch, macht sie einander also ähnlicher statt unterscheidbarer.
+Der Near-Duplicate-Merge (Schwelle 0.95) entfernte daraufhin **10 Chunks
+zusätzlich** — darunter `info-mychrono24-0003` und `info-conditions-0004`,
+die prompt als neue Misses auftauchten. Ein Feld, das keine Information
+zwischen Geschwister-Chunks trägt, verdrängt die, die es tut.
+
+Die **FAQ-Kategorie im Rerank-Text** (der Cross-Encoder sieht
+`"Kategorie — Frage"` statt nur `"Frage"`) war exakt neutral: identische
+Trefferquote auf beiden Sets, identische Miss-Listen, kein einziger Fall
+kippt in irgendeine Richtung. Das Themenlabel trägt für den Reranker
+nichts bei, was Frage und Antwort nicht schon hergeben. Die Kategorie
+bleibt als Chroma-Metadatum liegen — sie kostet nichts und wäre die
+Voraussetzung für eine spätere Filterung, aber als Ranking-Signal ist sie
+gemessen wertlos.
 
 Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
 Retrieval findet jeweils die richtige Themenfamilie, aber das falsche
