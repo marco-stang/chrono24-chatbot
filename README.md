@@ -111,7 +111,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: FAQ-Kategorie in den **Embedding**-Text (statt nur Rerank-Text) | 91 % / 100 %, dieselben drei Misses |
 | verworfen: Kategorie bei allen Dokumenten im Embedding | 91 % / 100 %, dieselben drei Misses |
 | verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
-| verworfen: Rollen-Malus (Verkäufer-Frage wertet „Uhren kaufen"-Kategorien ab) | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 |
+| verworfen: Rollen-Malus über die FAQ-**Kategorie**, weich, nach dem Ranking | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 — **kein harter Test der Rollen-Idee**, siehe unten |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -268,9 +268,21 @@ erreichen.
   Duplikat-Anzahl kalibriert): 91 % / 100 % — **exakt dieselben drei Misses**.
 
 Dass ein komplett anderes Modell an denselben drei Fällen scheitert, ist das
-stärkste Argument dafür, dass hier kein Modell von der Stange mehr hilft. Was
-bliebe, ist Domänen-Finetuning auf Chrono24-Frage/Antwort-Paaren — begründeter
-Aufwand erst, wenn das Projekt echten Traffic sieht.
+stärkste Argument dafür, dass hier kein Modell von der Stange mehr hilft.
+
+**Eine Idee ist damit ausdrücklich nicht widerlegt.** Der oben verworfene
+Rollen-Malus benutzte die FAQ-Kategorie als Rollen-Ersatz und zog Punkte *nach*
+dem Ranking ab. Beides ist zu schwach für einen ehrlichen Test: 132 der 318
+Dokumente tragen überhaupt keine Kategorie — darunter ausgerechnet
+info-escrow-0007, einer der beiden Rollen-Fälle. Der Malus konnte dieses
+Dokument gar nicht erreichen. Ein eigenes `audience`-Feld (Käufer/Verkäufer/
+neutral) auf *allen* Dokumenten, als harter Filter *vor* der Fusion, ist eine
+andere Sache und noch offen — Design in
+`docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md`.
+
+Was darüber hinaus bliebe, ist Domänen-Finetuning auf
+Chrono24-Frage/Antwort-Paaren — begründeter Aufwand erst, wenn das Projekt
+echten Traffic sieht.
 
 ### Held-out-Validierung
 

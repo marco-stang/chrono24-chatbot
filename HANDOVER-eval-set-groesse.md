@@ -48,7 +48,8 @@ der README-Ablationstabelle mit Zahlen. Die wichtigsten für die Einordnung:
 | Embedder `multilingual-e5-base`, Merge fair kalibriert | **exakt dieselben drei Misses** |
 | Doc2Query für alle 132 page_chunks (568 Fragen) | Hit-Rate unverändert |
 | Kategorie im Embedding-Text (3 Varianten) | dieselben drei Misses |
-| `TOP_K_CANDIDATES`, `RRF_K`, Pfad-Gewichte, Rollen-Malus | neutral oder schlechter |
+| `TOP_K_CANDIDATES`, `RRF_K`, Pfad-Gewichte | neutral oder schlechter |
+| Rollen-Malus über die FAQ-**Kategorie**, weich, nach dem Ranking | neutral — **aber kein harter Test**, siehe Kasten unten |
 
 **Die Diagnose ist abgeschlossen:** `paraphrase-multilingual-MiniLM-L12-v2` ist ein
 Paraphrase-Modell und belohnt Nomen-Überlappung statt Frage-Antwort-Passung (faq-0121
@@ -59,6 +60,15 @@ Modelle von der Stange als Lösung aus.
 
 **Dieses Handover ist deshalb bewusst kein weiterer Optimierungsversuch.** Es geht darum,
 die Messung tragfähig zu machen — nicht die Zahl zu heben.
+
+> **Achtung, eine Idee ist nicht widerlegt.** Parallel zu dieser Messrunde ist ein Design
+> entstanden: `docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md` —
+> ein `audience`-Feld (kaeufer/verkaeufer/neutral) auf allen Dokumenten, als **harter
+> Filter vor der Fusion**. Der oben verworfene Rollen-Malus ist *nicht* dasselbe: er
+> benutzte die FAQ-Kategorie als Rollen-Ersatz und zog Punkte nach dem Ranking ab. 132 der
+> 318 Dokumente tragen gar keine Kategorie — darunter info-escrow-0007, einer der beiden
+> Rollen-Fälle. Der Malus konnte dieses Dokument nie erreichen. Die Zeile in der
+> Ablationstabelle darf also nicht als „Rollen-Idee tot" gelesen werden.
 
 ---
 
@@ -131,6 +141,28 @@ Eval-Fragen dienen — das wäre ein direkter Zirkelschluss.
 
 Nach Schritt 1–3 sollte die Warnung bei Off-Topic und Held-out verschwinden — das ist
 das messbare Abnahmekriterium für diese Aufgabe.
+
+---
+
+## Warum diese Aufgabe vor dem Rollenfilter kommt
+
+Das Rollenfilter-Design zielt auf die zwei Kandidaten-Misses — also **2 von 33 Fragen**
+oder 6 Prozentpunkte. Das aktuelle Tuning-Set hat ein Konfidenzintervall von **20 Punkten
+Breite**. Selbst wenn der Filter beide Fälle löst, ist der Effekt **statistisch nicht von
+Null zu unterscheiden**: 30/33 und 32/33 haben überlappende Intervalle.
+
+Daraus folgt nicht, dass der Filter nicht gebaut werden soll — sondern dass sein Erfolg
+anders belegt werden muss als über die Gesamt-Hit-Rate:
+
+- **Gezielt prüfen**, ob faq-0098 und info-escrow-0007 im gefilterten Kandidatenpool
+  auftauchen und korrekt ranken (das steht so schon im Design unter „Test").
+- **Keine Regression** auf allen anderen Fragen — das ist das, was die Gesamtzahl
+  tatsächlich beantworten kann.
+- Für eine Aussage wie „der Filter hebt die Hit-Rate" braucht es **erst das größere
+  Eval-Set**.
+
+Wer beide Aufgaben in einer Sitzung macht: **Eval-Set zuerst**, sonst ist das Ergebnis
+des Filters nicht interpretierbar.
 
 ---
 
