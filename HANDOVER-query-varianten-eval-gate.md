@@ -161,39 +161,59 @@ erzählt die Konfidenz-Gate-Geschichte (0 % → 50 %) als seine eine technische 
 mit den echten Zahlen inklusive der unvorteilhaften. `PRODUCT.md`-Evidenzliste steht jetzt
 auf 11 Projekten statt veralteter 8.
 
-**In marco-os committet, aber nicht gepusht** — ein Push geht dort direkt live auf GitHub
-Pages, und es gibt einen offenen Befund (siehe unten).
+**In marco-os committet** (`e774d16` Knoten, `0451dd2` Layout), Push siehe unten.
 
-**Offener Befund: das Portrait-Layout wird durch die zwei neuen Knoten enger.** Der
-Cluster `agentic-ai` trägt jetzt fünf Ring-Knoten statt drei, und `graph-layout.js` ist
-sichtbar auf die alten Zahlen getunt — der Kommentar an `CLUSTER_ANGLE_OFFSET_DEG` sagt
-wörtlich „agentic-ai has 4 members spaced 90deg apart". Gemessen (kleinster Abstand
-zwischen zwei Knoten, `computeLayout` direkt aufgerufen):
+**Portrait-Layout nachgezogen** (marco-os `0451dd2`). Der Cluster `agentic-ai` trägt jetzt
+fünf Ring-Knoten statt drei, und `graph-layout.js` war sichtbar auf die alten Zahlen
+getunt — der Kommentar sagte wörtlich „agentic-ai has 4 members spaced 90deg apart". Der
+kleinste Knotenabstand im Portrait fiel dadurch von 44 px auf 35 px, bei 34 px
+Planetendurchmesser: die Planeten überlappten knapp nicht, ihre Labels schon.
 
-| Viewport | vorher (9 Projekte) | nachher (11) |
-|---|---|---|
-| 1440×900 (Desktop) | 136 px | 134 px |
-| 390×844 (iPhone) | 58 px | 39 px |
-| 360×800 | — | 35 px |
+Von Hand nicht mehr zu treffen (jede Winkeländerung verschiebt fünf Positionen gegen sechs
+andere), deshalb per Rastersuche über Portrait-Winkel und Ring-Radien bestimmt. Zielgröße:
+kleinster Abstand zwischen zwei beliebigen Knoten über fünf Portrait-Viewports.
 
-Desktop ist unverändert. Auf Portrait-Viewports schrumpft der Abstand auf 39 px bei
-34 px Planetendurchmesser — die Planeten selbst überlappen also knapp nicht, ihre Labels
-aber schon. Zwei naheliegende Auswege wurden durchgerechnet und helfen **nicht**:
+| | kleinster Knotenabstand |
+|---|---|
+| 9 Projekte, alte Werte | 44 px |
+| 11 Projekte, alte Werte | 35 px |
+| **11 Projekte, neue Werte** | **55–72 px** |
 
-- **andere Cluster-Zuordnung**: jede getestete Variante ist schlechter (Chatbot nach
-  `full-stack`: 30 px; nach `cloud`: 30 px). Beide Projekte in `agentic-ai` ist bereits
-  das Optimum.
-- **nur die Portrait-Winkel neu tunen**: eine Rastersuche über alle drei
-  `CLUSTER_ANGLE_OFFSET_DEG_PORTRAIT`-Werte kommt auf höchstens 44 px.
+Landscape blieb unangetastet (123–135 px) — nur die `_PORTRAIT`-Konstanten sind geändert.
+Zwei vorher geprüfte Auswege halfen nicht und sind verworfen: andere Cluster-Zuordnung
+(Chatbot nach `full-stack` oder `cloud`: je 30 px) und reines Winkel-Tuning ohne Radien
+(max. 44 px).
 
-Ein echter Fix müsste an `CLUSTER_RX_MULTIPLIER_PORTRAIT` (1.25/1.65/2.0), also an die
-Ring-Radien. Das ist eine bewusst getunte Stelle des Designsystems mit ausführlichen
-Begründungen im Code — deshalb nicht im Vorbeigehen angefasst, sondern hier vorgelegt.
-Bis dahin ist marco-os nicht gepusht und nichts davon live.
+**Wichtig für später:** die Werte gelten für genau diese Knotenverteilung (agentic 5,
+cloud 1, full-stack 4). Wer ein Projekt hinzufügt oder ein Cluster umhängt, fährt die
+Suche neu — das steht auch als Kommentar über den Konstanten.
 
 Sobald Repo und Deploy stehen: in beiden Einträgen `demoUrl`/`repoUrl` füllen und
 `status` auf `live` ziehen. Beim Chatbot zusätzlich die README-Zeile „**Demo-Link:** folgt
 (Deploy steht noch aus)" ersetzen.
+
+### 7. Faithful-Gate war flaky — **behoben** (`9930e56`)
+
+Der erste `quality-gate`-Lauf auf `main` meldete 94 %, der zweite 88 % — dazwischen lagen
+nur Markdown und eine CI-Datei, die Pipeline war Byte für Byte dieselbe. Ursache: **keiner
+der drei Claude-Calls setzte `temperature`**, alle liefen auf dem API-Default 1.0. Ein
+Judge, der selbst würfelt, misst nichts.
+
+Alle drei stehen jetzt auf `temperature=0` (Haiku 4.5 nimmt den Parameter; Fable/Opus 5 und
+Sonnet 5 würden ihn ablehnen — relevant, falls das Modell je gewechselt wird).
+
+Das löst es **nicht vollständig**, und das ist der eigentliche Befund: zwei Läufe bei
+identischem Code und `temperature=0` ergeben weiter 91 % und 94 %. Gierige Dekodierung ist
+keine Determinismus-Garantie der API. Sechs Messungen insgesamt: 100 / 94 / 88 / 94 / 91 /
+94 %. Bei 33 Fragen sind drei Prozentpunkte genau eine Frage.
+
+`MIN_FAITHFUL_RATE` deshalb von 0.90 auf **0.82** (27/33), zwei Fragen unter dem gemessenen
+Boden von 29/33 — dieselbe Puffer-Logik wie bei den Hit-Rate-Schwellen. Ein Gate bei 90 %
+war auf diesem Sample nachweislich flaky, und rote CI ohne Regression ist schlimmer als gar
+kein Gate, weil man aufhört hinzusehen.
+
+Die README-Zahl „100 % (33/33)" ist ersetzt: dort steht jetzt die Tabelle aller sechs Läufe
+mit Temperatur-Setup.
 
 ## Bewusst nicht gemacht
 
@@ -249,7 +269,7 @@ Sobald Repo und Deploy stehen: in beiden Einträgen `demoUrl`/`repoUrl` füllen 
 | `TUNING_MIN_HIT_RATE` | 0.85 | `eval/run_eval.py` |
 | `HOLDOUT_MIN_HIT_RATE` | 0.80 | `eval/run_eval.py` |
 | `MIN_ABSTENTION_RATE` | 0.35 | `eval/run_eval.py` |
-| `MIN_FAITHFUL_RATE` | 0.90 | `eval/judge.py` |
+| `MIN_FAITHFUL_RATE` | 0.82 | `eval/judge.py` |
 | `TOP_K_CANDIDATES` | 10 | `app/retrieval.py` |
 | `MAX_VARIANTS_PER_DOC` | 5 | `app/retrieval.py` |
 | `SIM_THRESHOLD` / `BM25_THRESHOLD` / `RERANK_THRESHOLD` | 0.40 / 5.5 / -6.0, **ODER**-verknüpft | `app/retrieval.py` |
