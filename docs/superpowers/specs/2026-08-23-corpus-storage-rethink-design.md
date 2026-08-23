@@ -31,33 +31,58 @@ lohnt, wenn Schritt 1s Schema feststeht.
 
 ### Schritt 1 — Rollenfeld als harter Pre-Filter (dieser Umbau)
 
+**Korrektur nach Code-Lesen (ersetzt eine fruehere Annahme dieser Spec):** `rewrite_query`
+in `app/llm.py` macht *nicht* bei jeder Anfrage einen LLM-Call — bei deutschen Fragen ohne
+Chatverlauf (der Mehrheitsfall) gibt die Funktion die Frage unveraendert zurueck, ganz ohne
+Call (Zeile 59f., bewusst so gebaut, um unnoetige Rewrite-Calls zu vermeiden). Eine
+Rollen-Klassifikation an diesen Call zu haengen wuerde also fuer die meisten Anfragen einen
+neuen LLM-Call einfuehren — genau das, was diese Spec eigentlich vermeiden wollte. Deshalb:
+
+**Aenderung an `app/textproc.py`:** neue `classify_audience(text: str) -> str`-Funktion,
+reine Keyword-Heuristik nach demselben Muster wie `looks_german`/`GERMAN_HINTS` und die
+`QUERY_SYNONYMS`-Liste in derselben Datei — zwei `frozenset`s `BUYER_HINTS`/`SELLER_HINTS`
+(Wortstaemme wie "kauf", "käufer", "kaufen" bzw. "verkauf", "verkäufer", "verkaufen"),
+Rueckgabe `kaeufer`/`verkaeufer` bei eindeutigem Uebergewicht, sonst `neutral`. Kein
+LLM-Call, keine Latenz-/Kostenaenderung gegenueber heute.
+
 **Aenderung an `data/corpus.json`:** neues Pflichtfeld `audience` pro FAQ- und
-Seiten-Chunk-Dokument, Werte `kaeufer` | `verkaeufer` | `neutral`. Population einmalig
-per LLM-Klassifizierungslauf ueber alle ~150 Dokumente, danach Stichprobenkontrolle von
-Hand (gleiches Muster wie die handkuratierte Synonymliste in `app/textproc.py`).
+Seiten-Chunk-Dokument, Werte `kaeufer` | `verkaeufer` | `neutral`. Population: erster
+Durchlauf mit derselben `classify_audience`-Heuristik ueber Frage+Antwort (FAQ) bzw.
+Ueberschrift+Text (Seiten-Chunk), danach **zwingend** Stichprobenkontrolle von Hand —
+insbesondere die beiden bekannten Miss-Faelle `faq-0098` und den escrow-Chunk zur
+Zahlungseingangs-Pruefung explizit pruefen, da an ihnen haengt, ob der Ansatz ueberhaupt
+etwas bringt. Reicht die Heuristik bei der Kontrolle sichtbar nicht, ist eine kleine
+Liste von Hand-Korrekturen (gleiches Prinzip wie `QUERY_SYNONYMS`) der naechste Schritt,
+kein Grund, auf einen LLM-Klassifizierungslauf zu wechseln.
 
 **Aenderung an `pipeline/index.py`:** `audience` wird wie andere Metadaten in Chroma
 mitindexiert (analog zum bereits vorhandenen `category`-Feld, das aktuell *nicht* mehr
 indexiert wird — `audience` hier bewusst schon, weil es fuer einen harten Filter gebraucht
 wird, nicht nur als Text-Zusatz).
 
-**Aenderung an `app/main.py`/Query-Rewrite:** der bestehende `rewrite_query`-Call (Haiku,
-uebersetzt bereits nicht-deutsche Fragen) bekommt ein zusaetzliches Ausgabefeld
-`query_audience: kaeufer|verkaeufer|neutral` — kein neuer LLM-Call, nur ein erweitertes
-JSON-Schema am bestehenden Call.
+**Aenderung an `app/main.py`:** nach dem `rewrite_fn`-Aufruf `textproc.classify_audience`
+auf die zurueckgegebene Standalone-Frage anwenden, Ergebnis an `retriever.retrieve(...,
+audience=...)` durchreichen. `rewrite_query`s Signatur/Rueckgabe bleibt unveraendert —
+kein Eingriff in die elf Testfaelle in `tests/test_llm.py`, `tests/test_api.py`, die auf
+dem bestehenden `(text, tokens)`-Rueckgabewert aufbauen.
 
-**Aenderung an `app/retrieval.py`:** vor der RRF-Fusion, wenn `query_audience != neutral`:
-Kandidatenmenge (sowohl BM25- als auch Vektor-Pfad) auf Dokumente mit
-`audience in {query_audience, neutral}` einschraenken. Echter Ausschluss aus der
-Kandidatenmenge, kein Score-Abzug — Unterschied zum bereits verworfenen Rollen-Malus, der
-weich und auf der falschen Ebene (Kategorie statt Rolle, nach statt vor dem Ranking) ansetzte.
+**Aenderung an `app/retrieval.py`:** `Retriever.retrieve(self, query, top_k=5, audience:
+str | None = None)`. Wenn `audience` in `{"kaeufer", "verkaeufer"}`: Kandidatenmenge
+(sowohl BM25- als auch Vektor-Pfad, vor der RRF-Fusion) auf Dokumente mit
+`doc.get("audience", "neutral") in {audience, "neutral"}` einschraenken. Echter Ausschluss
+aus der Kandidatenmenge, kein Score-Abzug — Unterschied zum bereits verworfenen
+Rollen-Malus, der weich und auf der falschen Ebene (Kategorie statt Rolle, nach statt vor
+dem Ranking) ansetzte. `top_k=5`-Default und bestehende Aufrufe ohne `audience`-Argument
+(z. B. in `eval/run_eval.py::abstention_rate`, das off-topic-Fragen ohne jede Klassifikation
+prueft) bleiben unveraendert lauffaehig.
 
-**Fehlerbehandlung:** Klassifiziert `rewrite_query` eine Anfrage falsch als `kaeufer` oder
-`verkaeufer`, wenn sie eigentlich `neutral` waere, killt der harte Filter potenziell einen
-echten Treffer statt Rauschen zu entfernen — anders als beim Malus gibt es hier keine sanfte
-Abstufung. Deshalb: bei Unsicherheit soll `rewrite_query` `neutral` bevorzugen (im Prompt
-explizit machen), und das bestehende Eval-Gate (`TUNING_MIN_HIT_RATE`,
-`HOLDOUT_MIN_HIT_RATE`) bleibt das Sicherheitsnetz gegen eine Regression.
+**Fehlerbehandlung:** Klassifiziert `classify_audience` eine Anfrage falsch als `kaeufer`
+oder `verkaeufer`, wenn sie eigentlich `neutral` waere, killt der harte Filter potenziell
+einen echten Treffer statt Rauschen zu entfernen — anders als beim Malus gibt es hier keine
+sanfte Abstufung. Deshalb: die Heuristik entscheidet nur bei eindeutigem Uebergewicht eines
+Wortfelds, bei Gleichstand oder keinem Treffer `neutral` (kein Filter). Das bestehende
+Eval-Gate (`TUNING_MIN_HIT_RATE`, `HOLDOUT_MIN_HIT_RATE`) bleibt das Sicherheitsnetz gegen
+eine Regression.
 
 **Test:** `eval/run_eval.py` gegen den bestehenden Tuning-Satz (33 Fragen) und Held-out-Satz
 (15 Fragen) — keine neue Infrastruktur, ein neuer Eintrag in der README-Ablationstabelle.
