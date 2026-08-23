@@ -27,11 +27,12 @@ der RRF-Fusion. **BM25 bleibt variantenfrei** — durch Test festgenagelt
 | Job | Läuft | Kosten | Prüft |
 |---|---|---|---|
 | `eval-gate` | jeder PR + Push auf main | keine (nur lokales Retrieval) | Hit-Rate@5 Tuning + Held-out, Abstention-Rate |
-| `quality-gate` | nur Push auf main | ~66 Haiku-Calls | Faithful-Rate via `eval/judge.py` |
+| `quality-gate` | Push auf main, sofern nicht nur Doku geändert | ~66 Haiku-Calls | Faithful-Rate via `eval/judge.py` |
 
 `quality-gate` braucht das Repo-Secret **`ANTHROPIC_API_KEY`** (GitHub → Settings →
-Secrets and variables → Actions). **Ist noch nicht gesetzt** — der Job schlägt sonst bei
-jedem Push auf main fehl.
+Secrets and variables → Actions). **Ist seit dem 23.08.2026 gesetzt.** Der Job trägt
+seitdem außerdem einen Doku-Filter: ein Push, der nur `*.md` oder `docs/` anfasst,
+überspringt den Judge-Lauf, weil er die Antwortqualität nicht ändern kann.
 
 Beide lokal aufrufbar: `python -m eval.run_eval --gate` bzw. `python -m eval.judge --gate`.
 

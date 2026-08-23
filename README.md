@@ -465,7 +465,12 @@ zusätzlich zu ruff/pytest/Docker-Build:
 - **`quality-gate`** (nur bei Push auf main, kostet Haiku-API-Calls): lässt
   `eval/judge.py --gate` über alle Tuning-Fragen laufen und prüft die
   Faithful-Rate gegen `eval/judge.py::MIN_FAITHFUL_RATE`. Braucht das
-  Repo-Secret `ANTHROPIC_API_KEY`.
+  Repo-Secret `ANTHROPIC_API_KEY`. Ein Push, der nur Markdown oder `docs/`
+  anfasst, überspringt den Lauf — ~66 Haiku-Calls für eine Änderung, die
+  die Antwortqualität nicht berühren kann, sind rausgeworfenes Geld. Lässt
+  sich der Commit-Bereich nicht auflösen (erster Push, Force-Push), läuft
+  der Judge trotzdem: lieber einmal zu viel messen als eine Regression
+  verpassen.
 
 Beide Skripte laufen auch lokal manuell:
 
