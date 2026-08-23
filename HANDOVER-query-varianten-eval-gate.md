@@ -119,6 +119,34 @@ Branch ist weder gemerged noch gepusht. Das Repo ist noch privat, und der Deploy
 weiterhin aus (siehe `## Deployment` im README — Render Free-Tier reicht nicht, HF Spaces
 Docker war die Empfehlung).
 
+Beim ersten Push auf `main` wird der neue Job `quality-gate` rot, solange das Repo-Secret
+`ANTHROPIC_API_KEY` nicht gesetzt ist (siehe oben).
+
+### 4. `data/variants.json` und der committete Index widersprechen sich
+
+Die Fix-Welle hat in `data/variants.json` unter `faq-0011` einen englischen Ausrutscher
+korrigiert (`"What gibt es für Anzeichen…"` → `"Was …"`). Ein Reindex war dort bewusst
+verboten, und seitdem wurde keiner gefahren — letzter Index-Commit ist `c737ee1`, mehrere
+Commits davor. **Der Vektor im Index trägt also weiter das alte „What".**
+
+Kein Fehler, aber eine stille Inkonsistenz: wer die JSON liest, hält sie für den Stand des
+Index. Verschwindet beim nächsten `python -m pipeline.index` von selbst — bis dahin gilt
+für jede Änderung an `data/variants.json`: sie wirkt erst nach einem Reindex.
+
+### 5. Kategorie-Metadatum behalten oder entfernen?
+
+`pipeline/index.py::_doc_metadata` schreibt `category` an jeden FAQ-Eintrag, aber **kein
+Code liest es** — kein `where=`-Filter, kein Ranking-Signal (als solches gemessen: exakt
+neutral, siehe Ablationstabelle). Der Final Review nannte es „speculative generality".
+
+Entweder rauswerfen, oder als bewusste Vorbereitung für spätere Filterung mit einem
+Kommentar versehen. Kostet im Index praktisch nichts, ist aber aktuell Daten ohne Abnehmer.
+
+### 6. marco-os-Verzahnung
+
+Weder dieses Projekt noch das Schwesterprojekt (Handover Brief Generator) hat einen Eintrag
+in `data/projects.js` von marco-os. Eigene Aufgabe, `PRODUCT.md`-Regeln dort beachten.
+
 ---
 
 ## Bewusst nicht gemacht
@@ -154,6 +182,16 @@ Docker war die Empfehlung).
 - Retrieval-Experimente laufen am besten gegen einen Wegwerf-Index außerhalb des Repos:
   `doc_embed_text` monkeypatchen, `build_index` in ein Scratch-Verzeichnis, `Retriever`
   darauf. So bleibt `data/index/` unangetastet, bis eine Variante wirklich gewinnt.
+- **Änderungen an `data/variants.json` wirken erst nach einem Reindex.** Aktuell weichen
+  JSON und Index bereits um einen Eintrag ab, siehe offene Frage 4.
+- **Die Review-Triage liegt nur in gitignoriertem Scratch.** Der Final Review hat sechs
+  Minors bewertet (unbedingte `Retriever`-Konstruktion in `eval/run_eval.py`, `import sys`
+  in `eval/judge.py::main()`, toter `try/except NotFoundError` in `tests/test_retrieval.py`,
+  funktionslokale Imports ebenda, zwei Zeilen über 100 Zeichen, die verwaisten
+  Chroma-Segmente) — fünf davon „bewusst liegen lassen". Die Begründungen stehen in
+  `.superpowers/sdd/2026-08-23-query-varianten-eval-gate/progress.md`, und das Verzeichnis
+  ist git-ignored: ein `git clean -fdx` löscht sie. Wer die Punkte aufgreifen will, sichert
+  die Datei vorher.
 
 ---
 
