@@ -1,7 +1,10 @@
 # Handover: Query-Varianten + CI Eval Gate
 
-**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 17 Commits, **nicht gemerged**, nicht gepusht
-**Basis:** `main` bei `48da6e9` · 149 Tests grün · ruff sauber · Working Tree clean
+**Stand:** 2026-08-23 (Abend) · **in `main` gemerged und gepusht** (Fast-Forward, `ed30609`)
+149 Tests grün · ruff sauber · Working Tree clean · Repo weiter privat
+
+Alle sechs offenen Punkte dieses Handovers sind abgearbeitet — die Abschnitte unten
+bleiben als Begründungsprotokoll stehen, nicht als Aufgabenliste.
 
 Plan: `docs/superpowers/plans/2026-08-23-query-varianten-eval-gate.md`
 
@@ -71,7 +74,7 @@ dedupen, dann auf `n` kappen. `TOP_K_CANDIDATES` blieb bewusst bei 10.
 
 ---
 
-## Offene Entscheidungen (gehören dem Owner)
+## Entscheidungen des Owners (alle getroffen, 2026-08-23)
 
 ### 1. Konfidenz-Gate — **erledigt** (Commit 13)
 
@@ -113,14 +116,20 @@ Konfidenz-Gate-Abschnitt; der Abschnitt trennt Retrieval-Gate-Abstinenz (Schicht
 explizit von Prompt (Schicht 2, 2 Verweigerungen im Judge-Lauf) und Faithcheck (Schicht 3)
 und trägt die Signal- und Regel-Tabellen mit Zahlen.
 
-### 3. Merge / Push / Repo public?
+### 3. Merge / Push — **erledigt**
 
-Branch ist weder gemerged noch gepusht. Das Repo ist noch privat, und der Deploy steht
-weiterhin aus (siehe `## Deployment` im README — Render Free-Tier reicht nicht, HF Spaces
-Docker war die Empfehlung).
+`main` per Fast-Forward auf den Branch gezogen (keine Merge-Commits im Repo, Konvention
+gewahrt) und gepusht: `fa3a89a..ed30609`. Das Repo-Secret `ANTHROPIC_API_KEY` ist gesetzt.
 
-Beim ersten Push auf `main` wird der neue Job `quality-gate` rot, solange das Repo-Secret
-`ANTHROPIC_API_KEY` nicht gesetzt ist (siehe oben).
+Der erste Push lief noch ohne Secret und zeigte genau den vorhergesagten Fehler —
+`test`, `docker` und `eval-gate` grün, `quality-gate` rot mit
+`RuntimeError: ANTHROPIC_API_KEY ist nicht gesetzt`. Nach dem Setzen des Secrets neu
+gestartet.
+
+**Repo public** ist weiterhin offen und bewusst nicht mitentschieden: es hängt am Deploy
+(siehe `## Deployment` im README — Render Free-Tier reicht für Embedding- plus
+Reranker-Modell nicht, HF Spaces Docker war die Empfehlung). Solange es privat ist, tragen
+die marco-os-Knoten `demoUrl: null` und `repoUrl: null`.
 
 ### 4. `data/variants.json` vs Index — **erledigt** (Reindex, Commit 17)
 
@@ -141,12 +150,23 @@ gegen die Verzeichnisliste. Die ~4 MB Git-Historie bleiben, das wäre ein Rewrit
 ohne Leser laden dazu ein, sie für mehr zu halten, als sie gemessen sind. Kommt zurück,
 sobald ein Filter sie wirklich braucht. README-Absatz entsprechend angepasst.
 
-### 6. marco-os-Verzahnung
+### 6. marco-os-Verzahnung — **erledigt** (marco-os `e774d16`)
 
-Weder dieses Projekt noch das Schwesterprojekt (Handover Brief Generator) hat einen Eintrag
-in `data/projects.js` von marco-os. Eigene Aufgabe, `PRODUCT.md`-Regeln dort beachten.
+Beide Projekte sind jetzt Knoten in `data/projects.js`: `chrono24-chatbot` und
+`handover-brief`, beide im Cluster `agentic-ai`, beide `status: "no-demo"` mit
+`demoUrl: null` / `repoUrl: null` — ein Link, den Recruiter nicht öffnen können, ist kein
+Beleg, und `PRODUCT.md` verbietet Platzhalter-Demos bei `status: "live"`. Der Chatbot-Text
+erzählt die Konfidenz-Gate-Geschichte (0 % → 50 %) als seine eine technische Geschichte,
+mit den echten Zahlen inklusive der unvorteilhaften. `PRODUCT.md`-Evidenzliste steht jetzt
+auf 11 Projekten statt veralteter 8.
 
----
+**In marco-os committet, aber nicht gepusht** — ein Push geht dort direkt live auf GitHub
+Pages, und die neuen Planeten sollten vorher einmal im Browser gesehen werden
+(`start-local.bat`, Cluster `agentic-ai` trägt jetzt sechs statt vier Knoten).
+
+Sobald Repo und Deploy stehen: in beiden Einträgen `demoUrl`/`repoUrl` füllen und
+`status` auf `live` ziehen. Beim Chatbot zusätzlich die README-Zeile „**Demo-Link:** folgt
+(Deploy steht noch aus)" ersetzen.
 
 ## Bewusst nicht gemacht
 
