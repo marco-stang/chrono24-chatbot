@@ -105,6 +105,10 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: FAQ-Kategorie in den Rerank-Text | 91 % (30/33), exakt neutral |
 | verworfen: `TOP_K_CANDIDATES` 15/20/25/30/40 (erneut, nach den Varianten) | 91 % bis k=25, dann 88 → 85 %; Abstention 50 % → 43 % |
 | verworfen: Reranker nur als *ein* Signal (RRF über Rerank- und Fusionsrang) | 91 % (30/33), neutral bis −3 pp |
+| verworfen: stärkerer Reranker `bge-reranker-v2-m3` (568M) | 0 von 3 Misses gelöst, Latenz 0,7 s → 6,7–10,9 s |
+| verworfen: Embedder `multilingual-e5-base` statt MiniLM | 91 → 88 % Tuning, 100 → 93 % Held-out |
+| verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
+| verworfen: Rollen-Malus (Verkäufer-Frage wertet „Uhren kaufen"-Kategorien ab) | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -202,13 +206,36 @@ stattdessen Dokumente hoch, die dasselbe Vokabular tragen („Privatverkäufer",
 „Vorkasse", „Überweisung"), aber die andere Rolle adressieren. Das
 mehrsprachige MS-MARCO-Modell kennt diese Unterscheidung schlicht nicht.
 
-Zwei Auswege wurden gemessen und beide verworfen (siehe Ablationstabelle):
-mehr Kandidaten fürs Reranking bringt keine Treffer und kostet Abstention
-(50 % → 43 %); den Reranker nur als *ein* Signal zu behandeln und mit dem
-Fusionsrang zu verrechnen, ist neutral bis leicht schlechter. Was hier
-wirklich helfen würde, ist ein stärkerer Reranker — und der ist eine
-Deploy-Entscheidung, kein Parameter (siehe `## Deployment`, der Free-Tier
-trägt schon das aktuelle Modellpaar nur knapp).
+**Fünf Auswege wurden gemessen, alle fünf verworfen** (Zahlen in der
+Ablationstabelle). Der naheliegendste zuerst, weil er auch der war, den
+dieser Abschnitt zwischenzeitlich empfahl:
+
+- **Stärkerer Reranker** (`BAAI/bge-reranker-v2-m3`, 568M statt 118M
+  Parameter): löst **null von drei** Misses — faq-0033 rückt von Platz 8 auf
+  6, bleibt Miss; die anderen beiden sind bei `TOP_K_CANDIDATES=10` gar nicht
+  erst Kandidat. Dazu **6,7–10,9 s Rerank-Latenz** pro Anfrage auf CPU gegen
+  0,7–1,0 s beim aktuellen Modell. Für eine Live-Demo untragbar, und der
+  Gegenwert ist null.
+- **Anderer Embedder** (`intfloat/multilingual-e5-base`, Wegwerf-Index):
+  Tuning 91 % → 88 %, Held-out 100 % → 93 %, dieselben drei Misses plus ein
+  neuer. Die höheren Cosine-Werte lassen zusätzlich den
+  Near-Duplicate-Merge (0.95) Zieldokumente wegräumen — derselbe Effekt wie
+  beim Seitentitel-Experiment weiter oben.
+- **Mehr Kandidaten**, **Reranker als nur ein Signal**, **RRF-Parameter und
+  Pfad-Gewichte** — siehe Tabelle, alle neutral oder schlechter.
+
+Das ändert die Diagnose: Es ist kein Modell-Problem, das ein größeres Modell
+löst. **Zwei der drei Misses sind ein Kandidaten-Problem** (das Ziel steht im
+Vektor-Ranking auf Platz 76 bzw. 130, nur BM25 findet es auf Platz 8 bzw. 6,
+und die RRF-Fusion bevorzugt Dokumente, die in *beiden* Listen stehen), **einer
+ist ein Reranker-Problem** (faq-0033 ist Kandidat und wird auf Platz 8
+gestuft). Die Kandidaten-Trefferquote@10 liegt bei 94 % Tuning / 100 %
+Held-out — sie ist bereits höher als die Endzahl.
+
+Was diese zwei Fälle wirklich lösen würde, ist ein Embedding, das
+Verkäufer-Fragen von Käufer-Dokumenten trennt. Das ist Domänen-Finetuning,
+kein Modellwechsel von der Stange — begründeter Aufwand erst, wenn das
+Projekt echten Traffic sieht.
 
 ### Held-out-Validierung
 

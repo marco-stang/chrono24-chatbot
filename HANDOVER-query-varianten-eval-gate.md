@@ -253,10 +253,31 @@ nicht belegen, was ihm nie gezeigt wurde. Ein besserer Reranker hebt beide Zahle
 Der Status quo (`TOP_K_CANDIDATES=10`, Sortierung allein nach Rerank-Score) ist unter allen
 getesteten Varianten das Optimum.
 
-**Der nächste echte Hebel ist ein stärkerer Reranker** — und das ist eine
-Deploy-Entscheidung, kein Parameter: der Free-Tier trägt Embedding- plus Reranker-Modell
-schon jetzt nur knapp (siehe `## Deployment` im README). Vor dem Wechsel gegen beide Sets
-messen und die Abstention-Rate mitprüfen.
+**Nachtrag: „ein stärkerer Reranker ist der nächste Hebel" stand hier und war falsch.**
+Gemessen (`BAAI/bge-reranker-v2-m3`, 568M gegen 118M Parameter): **null von drei Misses
+gelöst**, und die Rerank-Latenz steigt von 0,7–1,0 s auf **6,7–10,9 s** pro Anfrage auf
+CPU. Ebenfalls gemessen und verworfen: `intfloat/multilingual-e5-base` als Embedder
+(Tuning 91 → 88 %, Held-out 100 → 93 %, plus Merge-Artefakte durch höhere Cosine-Werte),
+ein `RRF_K`- und Pfad-Gewichts-Sweep (Status quo 60 / 1:1 ist Optimum; `w_bm=1.5` hebt
+Tuning auf 100 % und senkt Held-out auf 87 % — Lehrbuch-Overfitting) und ein
+Rollen-Malus über die FAQ-Kategorien (neutral bis −3 pp).
+
+**Korrigierte Diagnose:** Die drei Misses zerfallen in zwei Klassen, und nur eine davon
+ist überhaupt ein Reranker-Problem.
+
+| | Fälle | Ursache | Beleg |
+|---|---|---|---|
+| Kandidaten-Problem | faq-0098, info-escrow-0007 | Ziel steht im Vektor-Ranking auf Platz 76 bzw. 130; nur BM25 findet es (Platz 8 bzw. 6), und RRF bevorzugt Dokumente, die in *beiden* Listen stehen | bei `TOP_K_CANDIDATES=10` nicht in der Kandidatenmenge |
+| Reranker-Problem | faq-0033 | ist Kandidat, wird auf Platz 8 gestuft | Rerank-Score −0,05 gegen +4,56 für den Sieger |
+
+Die Kandidaten-Trefferquote@10 liegt bei 94 % (Tuning) / 100 % (Held-out) — also bereits
+über der Endzahl. Der Engpass sitzt verteilt, nicht an einer Stelle, die ein größeres
+Modell repariert.
+
+**Was wirklich helfen würde:** ein Embedding, das Verkäufer-Fragen von Käufer-Dokumenten
+trennt — also Domänen-Finetuning, kein Modellwechsel von der Stange. Lohnt sich erst mit
+echtem Traffic. Bis dahin ist 91 % / 100 % das Optimum unter allem Gemessenen, und die
+Grenze ist sauber benannt statt weggeredet.
 
 ## Bewusst nicht gemacht
 
