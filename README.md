@@ -116,6 +116,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | neutral: `audience`-Feld als harter Pre-Filter, echter Ausschluss vor der RRF-Fusion | 91 % / 100 % — **exakt unverändert, beide Rollen-Misses bleiben Misses**, siehe unten |
 | Engine-Wechsel: Chroma + Hand-BM25 (`rank_bm25`) → SQLite (`sqlite-vec` + FTS5), siehe unten | 91 % / 100 % (**exakt dieselben drei Misses**), Abstention 50 % → 57 % (8/14) |
 | Reranker-Finetune auf Käufer/Verkäufer-Hard-Negatives (1016 Beispiele, 2 Epochen), siehe unten | 91 % / 100 % — **dieselben drei Misses**, Abstention 57 % → 100 % (14/14) |
+| verworfen: RRF-Pfadgewicht erneut vermessen (SQLite-Engine + gefinetunter Reranker), siehe unten | `info-escrow-0007` bei **keinem** Gewicht bis 5.0× gelöst; Holdout bricht schon ab 1.05× ein |
 | LLM als Reranker (Haiku, unabhängige Scores) + Kandidaten-Union-Fix, siehe unten | Rollen-Misses gelöst, **neuer Miss** (DAC7) |
 | LLM als Reranker (Haiku, Rangfolge) + Kandidaten-Union-Fix, siehe unten | **100 % / 100 % — alle drei Dauer-Misses gelöst**, Abstention 100 % → 36 % (Architektur-Problem, kein Bugfix mehr — siehe `HANDOVER-llm-reranker.md`) |
 
@@ -452,6 +453,38 @@ Wegfall der Prämisse: `data/index/` ist seit diesem Wechsel nicht mehr
 versioniert (siehe `.gitignore`), sondern wird bei Bedarf lokal bzw. im
 Docker-Build und in CI neu erzeugt (`python -m pipeline.index`, kostenlos —
 das Embedding-Modell läuft lokal).
+
+#### RRF-Pfadgewicht erneut vermessen
+
+Die frühere Ablehnung von Pfad-Gewichten (Tabelle oben, `w_bm=1.5` hob Tuning
+auf 100 %, senkte Held-out auf 87 %) stammt von vor dem Engine-Wechsel und dem
+Reranker-Finetune. Nach beiden Änderungen hat sich die Kandidatenmenge leicht
+verschoben (Abstention 50 % → 57 % → 100 %) — Grund genug, die Idee mit
+frischer Evidenz statt alter Zahlen zu bewerten, bevor sie endgültig verworfen
+bleibt.
+
+Nachgemessen per Monkeypatch auf `rrf_fuse` (Wegwerf-Experiment, nichts davon
+im Repo) gegen den committeten Stand (SQLite-Engine, gefinetunter Reranker,
+`w_bm=1.0` = Status quo):
+
+| BM25-Gewicht | Tuning-Hit-Rate@5 | Holdout-Hit-Rate@5 | Misses |
+|---|---|---|---|
+| 1.0 (Status quo) | 91 % (30/33) | 100 % (15/15) | faq-0033, faq-0098, info-escrow-0007 |
+| 1.05 | 91 % (30/33) | **87 % (13/15)** | dieselben drei |
+| 1.1 | **94 % (31/33)** | 87 % (13/15) | nur noch faq-0098, info-escrow-0007 |
+| 1.2 – 5.0 | 88 % (29/33) | 73 % (11/15) | vier andere Fälle, `info-escrow-0007` bleibt |
+
+`info-escrow-0007` — einer der beiden namensgebenden Rollen-Fälle — wird bei
+**keinem** getesteten Gewicht gelöst, auch nicht bei 5,0×. Schon eine kleine
+Verschiebung (1.05×) kostet zwei Holdout-Treffer; ab 1.2× kollabiert Holdout
+auf 73 %. Bei 1.1× verschwindet zwar `faq-0033` aus den Tuning-Misses, aber
+auf Kosten der Holdout-Generalisierung — kein Nettogewinn nach der
+Entscheidungsregel „einfachste Option bei Gleichstand, keine Verschlechterung
+auf dem Held-out-Set". Der Befund stützt die These aus dem LLM-Reranker-
+Abschnitt unten: das Problem sitzt nicht an der Fusionsgewichtung, sondern
+daran, dass Embedding-artige Reranker keine Rollen-Disambiguierung leisten —
+mehr Gewicht auf einem unveränderten Signal verschiebt nur, welche falschen
+Kandidaten gewinnen.
 
 #### LLM als Reranker: Intention statt Nomen
 
