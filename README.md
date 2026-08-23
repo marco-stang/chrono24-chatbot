@@ -13,7 +13,8 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 **Auf einen Blick:**
 
 - **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
-  Cross-Encoder-Reranker, Synonym-Expansion — 91 % Hit-Rate@5,
+  Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte Query-Varianten
+  je FAQ (gemessen neutral) — 91 % Hit-Rate@5,
   held-out validiert (87 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot ehrlich „weiß ich nicht"
@@ -35,6 +36,7 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 [Scraping-Ethik](#scraping-ethik) ·
 [Lokal starten](#lokal-starten) ·
 [Tests](#tests) ·
+[CI Eval Gate](#ci-eval-gate) ·
 [Guards](#guards) ·
 [Deployment](#deployment-render)
 
@@ -329,6 +331,27 @@ Retrieval-Qualität messen:
 
 ```bash
 python -m eval.run_eval
+```
+
+### CI Eval Gate
+
+Zwei automatisierte Qualitäts-Regressionstests in `.github/workflows/ci.yml`,
+zusätzlich zu ruff/pytest/Docker-Build:
+
+- **`eval-gate`** (jeder Push und PR, keine API-Kosten): lädt den committeten
+  Index und prüft Hit-Rate@5 gegen Tuning- und Holdout-Fragen. Unter der
+  Mindestschwelle (`eval/run_eval.py::TUNING_MIN_HIT_RATE` /
+  `HOLDOUT_MIN_HIT_RATE`) schlägt der Job fehl.
+- **`quality-gate`** (nur bei Push auf main, kostet Haiku-API-Calls): lässt
+  `eval/judge.py --gate` über alle Tuning-Fragen laufen und prüft die
+  Faithful-Rate gegen `eval/judge.py::MIN_FAITHFUL_RATE`. Braucht das
+  Repo-Secret `ANTHROPIC_API_KEY`.
+
+Beide Skripte laufen auch lokal manuell:
+
+```bash
+python -m eval.run_eval --gate
+python -m eval.judge --gate
 ```
 
 ## Guards
