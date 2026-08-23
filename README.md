@@ -95,6 +95,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | A+B kombiniert | 88 % (29/33) |
 | **Gewinner: Status quo** (`TOP_K_CANDIDATES=10`, FAQ-Embedding = Frage) | **88 % (29/33)** |
 | + handkuratierte Synonym-Expansion der Query (nur BM25-Pfad) | **91 % (30/33)** |
+| + Query-Varianten (LLM-Umformulierungen, nur Embedding-Pfad) | 91 % (30/33) |
 | verworfen: Titel-Exaktheits-Bonus auf den Rerank-Score (α = 0.5–4) | 88 % → 85 % |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
@@ -124,6 +125,24 @@ der Misses — die 91 % bleiben eine Tuning-Set-Zahl. Ein im selben Zug
 gemessener Titel-Exaktheits-Bonus (generische Titel wie „Was kostet …"
 belohnen) wurde verworfen: wirkungslos bei kleinen Gewichten, ab α = 4
 kippt er einen bisher richtigen Fall.
+
+Query-Varianten (`pipeline/variants.py`) generieren pro FAQ per Haiku 3–5
+Umformulierungen und embedden sie zusätzlich zur Originalfrage, verknüpft
+über ein `canonical_id`-Metadatum in Chroma. Ziel: Nutzerformulierungen, die
+weiter von der FAQ-Frage abweichen, als es die multilingualen Embeddings
+allein auffangen. Gemessen: Tuning 91 % (30/33), Holdout 87 % (13/15) —
+beide exakt auf dem Stand vor dem Experiment, kein einziger Fall kippt in
+irgendeine Richtung. Ehrlich: auf den vorhandenen Testsets bringt das
+Experiment keinen messbaren Gewinn, weder positiv noch negativ. Ein
+plausibler Grund liegt im Retrieval-Code selbst: `Retriever.retrieve`
+begrenzt die Chroma-Anfrage weiterhin auf `TOP_K_CANDIDATES = 10` Treffer,
+jetzt aber aus einer deutlich größeren Collection (Original- plus bis zu
+5 Varianten-Einträge pro FAQ). Mehrere Varianten derselben Frage können
+sich mehrere dieser 10 Plätze teilen und kollabieren nach der
+canonical_id-Dedupe wieder auf denselben Kandidaten — es kommen dadurch
+nicht automatisch mehr *unterschiedliche* Dokumente in die engere Auswahl.
+`TOP_K_CANDIDATES` wurde bewusst nicht angehoben, um dieser Messung nicht
+nachträglich auf die Sprünge zu helfen.
 
 Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
 Retrieval findet jeweils die richtige Themenfamilie, aber das falsche
