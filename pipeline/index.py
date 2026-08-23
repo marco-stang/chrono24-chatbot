@@ -25,6 +25,17 @@ def doc_search_text(doc: dict) -> str:
     return f"{doc['heading']}\n{doc['text']}"
 
 
+def _doc_metadata(doc: dict) -> dict:
+    """Extrahiert Chroma-Metadaten aus einem Corpus-Dokument.
+
+    Alle Einträge erhalten canonical_id; FAQs zusätzlich category.
+    """
+    meta = {"canonical_id": doc["id"]}
+    if doc["type"] == "faq":
+        meta["category"] = doc["category"]
+    return meta
+
+
 # Ab dieser Cosine-Similarity gelten zwei page_chunks als inhaltsgleich.
 DEDUPE_THRESHOLD = 0.95
 
@@ -63,7 +74,39 @@ def _default_encoder(texts: list[str]) -> list[list[float]]:
     return model.encode(texts, normalize_embeddings=True).tolist()
 
 
-def build_index(corpus_path: Path, index_dir: Path, encoder=None) -> None:
+def _variant_entries(
+    docs: list[dict], variants_path: Path, encoder
+) -> tuple[list[str], list[list[float]], list[dict]]:
+    """Zusätzliche Chroma-Einträge für LLM-generierte FAQ-Umformulierungen.
+
+    Zeigen per canonical_id-Metadatum auf denselben Antwort-Chunk zurück;
+    BM25 bleibt unangetastet -- Varianten adressieren gezielt den
+    Embedding-Pfad (siehe Architektur-Begründung in variants.py).
+    """
+    if not variants_path.exists():
+        return [], [], []
+    variants: dict[str, list[str]] = json.loads(variants_path.read_text(encoding="utf-8"))
+    faq_ids = {d["id"] for d in docs if d["type"] == "faq"}
+
+    ids: list[str] = []
+    texts: list[str] = []
+    for faq_id, questions in variants.items():
+        if faq_id not in faq_ids:
+            continue  # Variante zu einem Dedupe-entfernten oder entfallenen FAQ.
+        for i, question in enumerate(questions, 1):
+            ids.append(f"{faq_id}#v{i}")
+            texts.append(question)
+
+    if not ids:
+        return [], [], []
+    embeddings = encoder(texts)
+    metadatas = [{"canonical_id": vid.split("#v")[0]} for vid in ids]
+    return ids, embeddings, metadatas
+
+
+def build_index(
+    corpus_path: Path, index_dir: Path, encoder=None, variants_path: Path | None = None
+) -> None:
     encoder = encoder or _default_encoder
     docs = json.loads(corpus_path.read_text(encoding="utf-8"))["documents"]
     index_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +118,18 @@ def build_index(corpus_path: Path, index_dir: Path, encoder=None) -> None:
         pass  # Idempotentes Aufräumen: beim ersten Lauf existiert die Collection noch nicht.
     coll = client.create_collection("docs", metadata={"hnsw:space": "cosine"})
     docs, embeddings = dedupe_docs(docs, encoder([doc_embed_text(d) for d in docs]))
-    coll.add(ids=[d["id"] for d in docs], embeddings=embeddings)
+    ids = [d["id"] for d in docs]
+    metadatas = [_doc_metadata(d) for d in docs]
+
+    if variants_path is not None:
+        variant_ids, variant_embeddings, variant_metadatas = _variant_entries(
+            docs, variants_path, encoder
+        )
+        ids += variant_ids
+        embeddings += variant_embeddings
+        metadatas += variant_metadatas
+
+    coll.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
 
     bm25 = BM25Okapi([tokenize(doc_search_text(d)) for d in docs])
     with open(index_dir / "bm25.pkl", "wb") as f:
@@ -83,5 +137,5 @@ def build_index(corpus_path: Path, index_dir: Path, encoder=None) -> None:
 
 
 if __name__ == "__main__":
-    build_index(settings.corpus_path, settings.index_dir)
+    build_index(settings.corpus_path, settings.index_dir, variants_path=settings.variants_path)
     print(f"Index nach {settings.index_dir} geschrieben")

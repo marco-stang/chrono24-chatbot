@@ -89,3 +89,64 @@ def test_build_index_writes_chroma_and_bm25(tmp_path):
     with open(index_dir / "bm25.pkl", "rb") as f:
         data = pickle.load(f)
     assert data["doc_ids"] == ["faq-0001", "info-buyer-protection-0001"]
+
+
+def test_build_index_stores_canonical_id_and_category_metadata(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=fake_encoder)
+
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    got = coll.get(ids=["faq-0001", "info-buyer-protection-0001"], include=["metadatas"])
+    by_id = dict(zip(got["ids"], got["metadatas"]))
+    assert by_id["faq-0001"] == {"canonical_id": "faq-0001", "category": "Kaufen"}
+    assert by_id["info-buyer-protection-0001"] == {"canonical_id": "info-buyer-protection-0001"}
+
+
+def test_build_index_embeds_variants_pointing_to_canonical_faq(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "variants.json"
+    variants_path.write_text(json.dumps({"faq-0001": ["Wie läuft der Käuferschutz ab?"]}),
+                             encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    build_index(corpus_path, index_dir, encoder=fake_encoder, variants_path=variants_path)
+
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    assert coll.count() == 3  # 2 Original-Docs + 1 Variante
+    got = coll.get(ids=["faq-0001#v1"], include=["metadatas"])
+    assert got["metadatas"][0] == {"canonical_id": "faq-0001"}
+
+
+def test_build_index_ignores_variants_for_faq_ids_not_in_corpus(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "variants.json"
+    variants_path.write_text(json.dumps({"faq-9999": ["Verwaiste Variante"]}), encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    build_index(corpus_path, index_dir, encoder=fake_encoder, variants_path=variants_path)
+
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    assert coll.count() == 2
+
+
+def test_build_index_without_variants_path_behaves_as_before(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    build_index(corpus_path, index_dir, encoder=fake_encoder)
+
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    assert coll.count() == 2
