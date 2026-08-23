@@ -115,6 +115,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: Rollen-Malus über die FAQ-**Kategorie**, weich, nach dem Ranking | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 — **kein harter Test der Rollen-Idee**, siehe unten |
 | neutral: `audience`-Feld als harter Pre-Filter, echter Ausschluss vor der RRF-Fusion | 91 % / 100 % — **exakt unverändert, beide Rollen-Misses bleiben Misses**, siehe unten |
 | Engine-Wechsel: Chroma + Hand-BM25 (`rank_bm25`) → SQLite (`sqlite-vec` + FTS5), siehe unten | 91 % / 100 % (**exakt dieselben drei Misses**), Abstention 50 % → 57 % (8/14) |
+| Reranker-Finetune auf Käufer/Verkäufer-Hard-Negatives (1016 Beispiele, 2 Epochen), siehe unten | 91 % / 100 % — **dieselben drei Misses**, Abstention 57 % → 100 % (14/14) |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -332,8 +333,63 @@ Repo (`audience`-Parameter mit Default `None`, ohne Wirkung auf bestehende
 Aufrufer), weil er keine Regression verursacht — nur eben auch keinen Gewinn.
 
 Was darüber hinaus bliebe, ist Domänen-Finetuning auf
-Chrono24-Frage/Antwort-Paaren — begründeter Aufwand erst, wenn das Projekt
-echten Traffic sieht.
+Chrono24-Frage/Antwort-Paaren — das wurde inzwischen ohne auf echten Traffic
+zu warten versucht, siehe nächster Abschnitt.
+
+#### Reranker-Finetune auf Käufer/Verkäufer-Hard-Negatives
+
+Statt auf echten Traffic zu warten: 1016 synthetische Trainingsbeispiele aus
+den bestehenden FAQ-Kategorien gebaut (Käufer-Kategorien wie „Uhren kaufen …"
+gegen Verkäufer-Kategorien wie „Privat/Gewerblich Uhren verkaufen …", je
+Positiv-Paar 2 Hard-Negatives aus der jeweils anderen Rolle mit hoher
+Wortüberlappung plus ein generisches Zufalls-Negativ). Die bestehenden
+LLM-Query-Varianten (`data/variants.json`, ohnehin schon bezahlt) liefern
+pro FAQ bis zu 5 zusätzliche Formulierungen statt nur der einen Originalfrage
+— das allein versechsfacht die Trainingsmenge gegenüber einem ersten,
+kleineren Testlauf (162 Beispiele, 1 Epoche, siehe unten). Alle 48
+Eval-Zieldokumente (Tuning + Holdout) sind aus dem Training komplett
+ausgeschlossen, weder als Positiv- noch als Negativ-Beispiel — die Messung
+bleibt unabhängig vom Training. Train/Val-Split auf Dokument-Ebene (80/20),
+damit keine Variante derselben FAQ in beiden Töpfen landet.
+`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (Basismodell) 2 Epochen
+`BinaryCrossEntropyLoss` trainiert, bestes Checkpoint nach Val-Accuracy
+(95,3 %, F1 0,90) übernommen.
+
+**Ergebnis, gemessen gegen den finalen Indexstand (SQLite-Engine + aktiver
+Audience-Filter):** Tuning 91 % (30/33), Holdout 100 % (15/15) — **exakt
+dieselben drei Misses wie ohne Finetune**, faq-0098 und info-escrow-0007
+eingeschlossen. Auch mit gezieltem Training auf genau dieses Rollenmuster
+bleibt der Reranker bei diesen zwei Fällen bei seinem Fehlurteil: score-mäßig
+verlieren die Zieldokumente sogar deutlicher gegen ihre Konkurrenten als beim
+Basismodell. Naheliegende Erklärung: beide Zieldokumente waren bewusst vom
+Training ausgeschlossen (Eval-Integrität), das Modell musste das
+Rollen-Konzept auf neue, ungesehene Dokumente generalisieren — und hat das
+bei genau diesen zwei besonders vokabular-überlappenden Fällen nicht
+geschafft. Ein erster Testlauf (162 Beispiele, 1 Epoche, ohne Split) hatte
+unter dem alten Chroma-Indexstand einen scheinbaren Nebengewinn gezeigt (ein
+vierter, bis dahin ungelöster Miss verschwand) — dieser Effekt reproduziert
+sich auf dem aktuellen, per `audience`-Feld und Dedupe-Rebuild veränderten
+Corpus-Stand nicht und war damit vermutlich an den damaligen Indexstand
+gebunden, kein robuster Fix.
+
+Echter, reproduzierbarer Gewinn liegt woanders: die Rerank-Score-Verteilung
+ist nach dem Finetune deutlich sauberer getrennt. On-topic-Minimum 3,01 vs.
+Off-topic-Maximum 2,38 (48 on-topic-, 14 Off-Topic-Fragen) — eine klare Lücke
+allein auf Basis des Rerank-Signals, verglichen mit −5,6 vs. −0,19 beim
+Basismodell, das dafür noch zwei weitere Signale (Cosine-Sim, BM25) brauchte.
+`RERANK_THRESHOLD` entsprechend neu kalibriert (2,9, knapp unter dem
+on-topic-Minimum). Damit steigt die Abstention-Rate auf **100 % (14/14)** —
+gegenüber 50–57 % vorher der stärkste Einzeleffekt in dieser gesamten
+Optimierungsreihe, allerdings auf einem kleinen Sample (95-%-Intervall
+[78 %, 100 %]) mit entsprechendem Vorbehalt.
+
+**Deployment-Konsequenz:** das Modell (470 MB, `cross-encoder/
+mmarco-mMiniLMv2-L12-H384-v1`-Architektur mit trainierten Gewichten) liegt in
+einem privaten Hugging-Face-Hub-Repo (`VoidFloat/chrono24-faq-reranker`) —
+zu groß für einen normalen Git-Commit (GitHub blockt Dateien > 100 MB ohne
+LFS), und ein öffentliches Repo hätte das trainierte Gewicht ohne Not offen
+gelegt. Der Server braucht deshalb `HF_TOKEN` als zusätzliche Env-Var (siehe
+Deployment-Abschnitt), sonst schlägt das Laden des Rerankers beim Boot fehl.
 
 #### Engine-Konsolidierung: Chroma + Hand-BM25 → SQLite (FTS5 + sqlite-vec)
 
@@ -826,6 +882,10 @@ Läuft als Docker-Runtime (siehe `Dockerfile`) auf Render.
 - **Env-Var:** `ANTHROPIC_API_KEY` muss gesetzt sein — ohne ihn startet der
   Service gar nicht erst (fail-fast beim Boot statt kaputter Antworten zur
   Laufzeit).
+- **Env-Var `HF_TOKEN`:** seit dem Reranker-Finetune (siehe „Warum
+  Hybrid-RAG") nötig, weil `VoidFloat/chrono24-faq-reranker` ein privates
+  Hugging-Face-Hub-Repo ist. Ohne Token schlägt das Laden des Rerankers beim
+  Boot fehl — ein Fine-grained-Token mit `read`-Recht auf das Repo genügt.
 - **Health-Check-Pfad:** `/api/health`.
 - **Kaltstart:** auf dem Render-Free-Tier ca. 30 s, weil der Container nach
   Inaktivität einschläft.

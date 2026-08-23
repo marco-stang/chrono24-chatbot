@@ -32,7 +32,7 @@ def neutral_reranker(query, texts):
     return [1.0 for _ in texts]
 
 
-def make_retriever(tmp_path, reranker):
+def make_retriever(tmp_path, reranker, rerank_threshold=-6.0):
     corpus_path = tmp_path / "corpus.json"
     corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": DOCS}),
                            encoding="utf-8")
@@ -42,8 +42,14 @@ def make_retriever(tmp_path, reranker):
     # liegt ein echter Treffer bei ~1.8 (gemessen), deutlich unter der
     # Produktionsschwelle (auf 313 Dokumente gemessen), die hier alles
     # abweisen wuerde.
+    # rerank_threshold fest auf -6.0 statt der Produktions-Konstante: Mock-
+    # Reranker in diesen Tests geben feste, willkuerliche Scores (1.0, 2.0,
+    # -5.0, -9.0) zurueck -- die muessen unabhaengig davon bleiben, welches
+    # echte Modell/welche Schwelle gerade in app.retrieval.RERANK_THRESHOLD
+    # konfiguriert ist (die Schwelle ist an ein konkretes Modell gekoppelt,
+    # siehe README, Reranker-Finetune).
     return Retriever(index_dir, corpus_path, encoder=encode_one, reranker=reranker,
-                     bm25_threshold=1.0)
+                     bm25_threshold=1.0, rerank_threshold=rerank_threshold)
 
 
 @pytest.fixture()
@@ -211,7 +217,8 @@ def test_gate_abstains_when_only_bm25_is_low(tmp_path):
     index_dir = tmp_path / "index"
     build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
     retriever = Retriever(index_dir, corpus_path, encoder=hefezopf_looks_like_faq,
-                          reranker=neutral_reranker, bm25_threshold=1.0)
+                          reranker=neutral_reranker, bm25_threshold=1.0,
+                          rerank_threshold=-6.0)
 
     assert retriever.retrieve("Wie backe ich einen Hefezopf?") == []
     # Gegenprobe: eine echte Frage mit demselben Vektor bleibt durch.

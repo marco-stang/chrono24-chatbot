@@ -22,8 +22,7 @@ RRF_K = 60
 # (eval/questions*.json, Stand 2026-08-23):
 #   Cosine-Sim   on-topic min 0.607   off-topic max 0.773
 #   BM25         on-topic min 6.36    off-topic max 20.96
-#   Rerank-Max   on-topic min -5.6    off-topic max -0.19 (Median -5.2)
-# Kein Signal trennt allein; die drei Schwellen liegen je unter dem on-topic-
+# Kein Signal trennt allein; die zwei Schwellen liegen je unter dem on-topic-
 # Minimum und fangen zusammen 7/14 Off-Topic-Fragen bei 0 verlorenen Treffern.
 # Die restlichen 7 sind absichtlich nah am Domänenvokabular (Omega-Wert,
 # eBay-Vergleich) -- dort muss der LLM-Prompt bzw. der Faithcheck greifen.
@@ -40,7 +39,13 @@ SIM_THRESHOLD = 0.40
 # (best_bm25 = -bm25(...)). BM25_THRESHOLD ist deshalb neu kalibriert, siehe
 # README ("Warum Hybrid-RAG", Engine-Wechsel-Eintrag) fuer die Messung.
 BM25_THRESHOLD = 5.5
-RERANK_THRESHOLD = -6.0
+# Seit dem Rollen-Finetune (siehe README) trennt der Rerank-Score allein
+# sauber: on-topic min 3.01 vs. off-topic max 2.38 (48 on-topic-, 14
+# Off-Topic-Fragen, Stand 2026-08-23) -- deutlich klarer als beim alten
+# Basismodell (-5.6 vs. -0.19), das noch die anderen zwei Signale brauchte,
+# um Off-Topic-Fragen überhaupt zu fangen. Schwelle knapp unter dem
+# on-topic-Minimum, 0 verlorene on-topic-Treffer bei voller Trennung.
+RERANK_THRESHOLD = 2.9
 # Varianten teilen sich sonst die n Rohplätze: bei bis zu MAX_VARIANTS_PER_DOC
 # Umformulierungen je FAQ kollabieren sie nach der canonical_id-Dedupe wieder
 # auf einen Kandidaten. Deshalb überfetchen und erst nach der Dedupe kappen —
