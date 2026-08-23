@@ -178,9 +178,9 @@ Die **FAQ-Kategorie im Rerank-Text** (der Cross-Encoder sieht
 Trefferquote auf beiden Sets, identische Miss-Listen, kein einziger Fall
 kippt in irgendeine Richtung. Das Themenlabel trägt für den Reranker
 nichts bei, was Frage und Antwort nicht schon hergeben. Die Kategorie
-bleibt als Chroma-Metadatum liegen — sie kostet nichts und wäre die
-Voraussetzung für eine spätere Filterung, aber als Ranking-Signal ist sie
-gemessen wertlos.
+steht weiter im Corpus, wird aber nicht mehr als Chroma-Metadatum
+indexiert — Daten ohne Abnehmer wären nur eine Einladung, sie für mehr zu
+halten, als sie gemessen sind.
 
 Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
 Retrieval findet jeweils die richtige Themenfamilie, aber das falsche

@@ -1,6 +1,6 @@
 # Handover: Query-Varianten + CI Eval Gate
 
-**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 15 Commits, **nicht gemerged**, nicht gepusht
+**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 17 Commits, **nicht gemerged**, nicht gepusht
 **Basis:** `main` bei `48da6e9` · 149 Tests grün · ruff sauber · Working Tree clean
 
 Plan: `docs/superpowers/plans/2026-08-23-query-varianten-eval-gate.md`
@@ -122,25 +122,24 @@ Docker war die Empfehlung).
 Beim ersten Push auf `main` wird der neue Job `quality-gate` rot, solange das Repo-Secret
 `ANTHROPIC_API_KEY` nicht gesetzt ist (siehe oben).
 
-### 4. `data/variants.json` und der committete Index widersprechen sich
+### 4. `data/variants.json` vs Index — **erledigt** (Reindex, Commit 17)
 
-Die Fix-Welle hat in `data/variants.json` unter `faq-0011` einen englischen Ausrutscher
-korrigiert (`"What gibt es für Anzeichen…"` → `"Was …"`). Ein Reindex war dort bewusst
-verboten, und seitdem wurde keiner gefahren — letzter Index-Commit ist `c737ee1`, mehrere
-Commits davor. **Der Vektor im Index trägt also weiter das alte „What".**
+Der committete Index trug unter `faq-0011` noch den alten Varianten-Text („What gibt es…"),
+die JSON schon „Was…". Reindex gefahren (`python -m pipeline.index`, kein API-Geld):
+1198 Einträge wie zuvor, Eval-Gate danach identisch — Tuning 91 %, Holdout 93 %,
+Abstention 50 %. JSON und Index sind jetzt deckungsgleich.
 
-Kein Fehler, aber eine stille Inkonsistenz: wer die JSON liest, hält sie für den Stand des
-Index. Verschwindet beim nächsten `python -m pipeline.index` von selbst — bis dahin gilt
-für jede Änderung an `data/variants.json`: sie wirkt erst nach einem Reindex.
+Im selben Zug die drei verwaisten HNSW-Segment-Verzeichnisse (`277d08f3-…`, `7101f8f8-…`,
+`a050db20-…`) entfernt; `data/index/chroma/` trägt nur noch das lebende Segment
+(`7a5a50ff-…`) plus `chroma.sqlite3`. Prüfung: `select id from segments` in der SQLite
+gegen die Verzeichnisliste. Die ~4 MB Git-Historie bleiben, das wäre ein Rewrite.
 
-### 5. Kategorie-Metadatum behalten oder entfernen?
+### 5. Kategorie-Metadatum — **entfernt** (Commit 17)
 
-`pipeline/index.py::_doc_metadata` schreibt `category` an jeden FAQ-Eintrag, aber **kein
-Code liest es** — kein `where=`-Filter, kein Ranking-Signal (als solches gemessen: exakt
-neutral, siehe Ablationstabelle). Der Final Review nannte es „speculative generality".
-
-Entweder rauswerfen, oder als bewusste Vorbereitung für spätere Filterung mit einem
-Kommentar versehen. Kostet im Index praktisch nichts, ist aber aktuell Daten ohne Abnehmer.
+`_doc_metadata` schreibt nur noch `canonical_id`. Die Kategorie steht weiter im Corpus
+(`pipeline/parse.py`), ist aber ohne Abnehmer nicht mehr im Index — YAGNI, und Daten
+ohne Leser laden dazu ein, sie für mehr zu halten, als sie gemessen sind. Kommt zurück,
+sobald ein Filter sie wirklich braucht. README-Absatz entsprechend angepasst.
 
 ### 6. marco-os-Verzahnung
 
@@ -172,9 +171,11 @@ in `data/projects.js` von marco-os. Eigene Aufgabe, `PRODUCT.md`-Regeln dort bea
   `git restore data/index/` — außer nach einem bewussten Reindex.
 - **Ein laufender `uvicorn` sperrt `chroma.sqlite3`.** Reindex und `git restore` scheitern
   dann. Erst Server stoppen (`Get-Process uvicorn`, `Stop-Process -Id …`).
-- **`data/index/chroma/` trägt drei HNSW-Segment-Verzeichnisse, nur `7101f8f8-…` lebt.**
-  `277d08f3-…` und `a050db20-…` sind Waisen aus früheren Builds, je 166 KB im Tree,
-  ~4 MB Git-Historie — schon vor diesem Branch committet. Aufräumen ist eine eigene Chore.
+- **Jeder Reindex legt ein neues HNSW-Segment-Verzeichnis an und lässt das alte als
+  Waise liegen.** Nach `python -m pipeline.index` prüfen: `select id from segments` in
+  `chroma.sqlite3` gegen `ls data/index/chroma/`, nicht referenzierte Ordner löschen.
+  Und: nach einem bewussten Reindex **kein** `git restore data/index/` — das setzt die
+  SQLite auf den alten Stand zurück, der dann auf ein gelöschtes Segment zeigt.
 - **`ruff check .` aktiviert E501 nicht.** Das Repo trägt ~11 Zeilen über 100 Zeichen.
   Zeilenlänge ist damit Konvention, nicht erzwungen.
 - **Reindex kostet kein API-Geld** (Embedding-Modell ist lokal), **Varianten-Generierung
@@ -182,8 +183,7 @@ in `data/projects.js` von marco-os. Eigene Aufgabe, `PRODUCT.md`-Regeln dort bea
 - Retrieval-Experimente laufen am besten gegen einen Wegwerf-Index außerhalb des Repos:
   `doc_embed_text` monkeypatchen, `build_index` in ein Scratch-Verzeichnis, `Retriever`
   darauf. So bleibt `data/index/` unangetastet, bis eine Variante wirklich gewinnt.
-- **Änderungen an `data/variants.json` wirken erst nach einem Reindex.** Aktuell weichen
-  JSON und Index bereits um einen Eintrag ab, siehe offene Frage 4.
+- **Änderungen an `data/variants.json` wirken erst nach einem Reindex.**
 - **Die Review-Triage liegt nur in gitignoriertem Scratch.** Der Final Review hat sechs
   Minors bewertet (unbedingte `Retriever`-Konstruktion in `eval/run_eval.py`, `import sys`
   in `eval/judge.py::main()`, toter `try/except NotFoundError` in `tests/test_retrieval.py`,

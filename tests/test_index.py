@@ -93,7 +93,8 @@ def test_build_index_writes_chroma_and_bm25(tmp_path):
     assert data["doc_ids"] == ["faq-0001", "info-buyer-protection-0001"]
 
 
-def test_build_index_stores_canonical_id_and_category_metadata(tmp_path):
+def test_build_index_stores_only_canonical_id_metadata(tmp_path):
+    """Kein Code liest weitere Metadaten -- was niemand abfragt, wird nicht indexiert."""
     corpus_path = tmp_path / "corpus.json"
     corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
                            encoding="utf-8")
@@ -104,7 +105,7 @@ def test_build_index_stores_canonical_id_and_category_metadata(tmp_path):
     coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
     got = coll.get(ids=["faq-0001", "info-buyer-protection-0001"], include=["metadatas"])
     by_id = dict(zip(got["ids"], got["metadatas"]))
-    assert by_id["faq-0001"] == {"canonical_id": "faq-0001", "category": "Kaufen"}
+    assert by_id["faq-0001"] == {"canonical_id": "faq-0001"}
     assert by_id["info-buyer-protection-0001"] == {"canonical_id": "info-buyer-protection-0001"}
 
 

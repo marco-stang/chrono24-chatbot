@@ -26,14 +26,13 @@ def doc_search_text(doc: dict) -> str:
 
 
 def _doc_metadata(doc: dict) -> dict:
-    """Extrahiert Chroma-Metadaten aus einem Corpus-Dokument.
+    """Chroma-Metadaten eines Corpus-Dokuments: nur canonical_id.
 
-    Alle Einträge erhalten canonical_id; FAQs zusätzlich category.
+    Die FAQ-Kategorie stand hier früher mit drin, ohne dass irgendein Code sie
+    las (kein where-Filter, als Ranking-Signal gemessen neutral). Sie bleibt
+    im Corpus und kommt zurück, sobald ein Abnehmer existiert.
     """
-    meta = {"canonical_id": doc["id"]}
-    if doc["type"] == "faq":
-        meta["category"] = doc["category"]
-    return meta
+    return {"canonical_id": doc["id"]}
 
 
 # Ab dieser Cosine-Similarity gelten zwei page_chunks als inhaltsgleich.
