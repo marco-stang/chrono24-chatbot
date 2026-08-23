@@ -12,9 +12,9 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 
 **Auf einen Blick:**
 
-- **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
-  Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte Query-Varianten
-  je FAQ — 91 % Hit-Rate@5,
+- **Hybrid-Retrieval:** BM25 (SQLite FTS5) + Vektorsuche (sqlite-vec),
+  RRF-Fusion, Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte
+  Query-Varianten je FAQ — 91 % Hit-Rate@5,
   held-out validiert (100 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot „weiß ich nicht" — abgesichert in drei Schichten
@@ -58,7 +58,8 @@ Offline-Pipeline (lokal, einmalig bzw. bei Bedarf)
 ───────────────────────────────────────────────────
 scraper (Playwright) → data/raw/*.html
 parser               → data/corpus.json   (versioniert im Repo)
-indexer              → data/index/        (Chroma + BM25, versioniert)
+indexer              → data/index/hybrid.db (SQLite: FTS5 + sqlite-vec,
+                                              nicht versioniert, Build-Artefakt)
 
 Online-Service (Docker)
 ───────────────────────────────────────────────────
@@ -113,6 +114,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
 | verworfen: Rollen-Malus über die FAQ-**Kategorie**, weich, nach dem Ranking | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 — **kein harter Test der Rollen-Idee**, siehe unten |
 | neutral: `audience`-Feld als harter Pre-Filter, echter Ausschluss vor der RRF-Fusion | 91 % / 100 % — **exakt unverändert, beide Rollen-Misses bleiben Misses**, siehe unten |
+| Engine-Wechsel: Chroma + Hand-BM25 (`rank_bm25`) → SQLite (`sqlite-vec` + FTS5), siehe unten | 91 % / 100 % (**exakt dieselben drei Misses**), Abstention 50 % → 57 % (8/14) |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -332,6 +334,66 @@ Aufrufer), weil er keine Regression verursacht — nur eben auch keinen Gewinn.
 Was darüber hinaus bliebe, ist Domänen-Finetuning auf
 Chrono24-Frage/Antwort-Paaren — begründeter Aufwand erst, wenn das Projekt
 echten Traffic sieht.
+
+#### Engine-Konsolidierung: Chroma + Hand-BM25 → SQLite (FTS5 + sqlite-vec)
+
+Schritt 2 desselben Designs (`docs/superpowers/specs/
+2026-08-23-corpus-storage-rethink-design.md`) tauscht die Speicher-Engine,
+nicht das Retrieval-Verhalten: Chroma (Vektor-Index) und ein von Hand
+gepflegter `rank_bm25.BM25Okapi`-Index (`data/index/bm25.pkl`) werden durch
+eine einzige SQLite-Datei (`data/index/hybrid.db`) ersetzt — eine
+`vec0`-Virtualtabelle (`sqlite-vec`) für die Vektorsuche, eine
+FTS5-Virtualtabelle für BM25 nativ. Zwei synchronisierte Doc-ID-Räume werden
+zu einem Schema; der harte `audience`-Filter aus Schritt 1 wandert von einem
+Python-seitigen Nachfilter zu einem SQL-`WHERE` auf einer `PARTITION KEY`-
+Spalte, direkt in beiden Teil-Queries.
+
+Zwei Stellschrauben mussten dabei neu vermessen werden, weil sich die
+zugrundeliegende Engine ändert, nicht weil sich das Modell oder der Corpus
+ändern:
+
+- **`SIM_THRESHOLD` (0.40) blieb unverändert.** `vec0` mit
+  `distance_metric=cosine` liefert für normalisierte Vektoren exakt
+  `1 − Cosine-Similarity` — gemessen identisch zum alten Chroma-Wert (on-topic
+  Similarity-Minimum 0.607 vor und nach dem Wechsel, auf die dritte
+  Nachkommastelle gleich).
+- **`BM25_THRESHOLD` musste neu kalibriert werden.** FTS5s eingebautes
+  `bm25()` hat eine andere Skala und ein anderes Vorzeichen als
+  `rank_bm25.BM25Okapi.get_scores()` (kleinerer/negativerer Wert =
+  relevanter). Der Retriever negiert den FTS5-Score bei der Abfrage
+  (`best_bm25 = -bm25(...)`), damit „höher = relevanter" überall im Code
+  gültig bleibt — die Zahl selbst ist trotzdem neu, weil FTS5s
+  BM25-Implementierung nicht exakt dieselben Werte wie `rank_bm25` produziert.
+  Gemessen auf demselben 48-Fragen-Set (Tuning + Holdout) wie oben: on-topic
+  BM25-Minimum 6.29 (vorher 6.36 — nahezu identisch trotz anderer
+  Bibliothek). Schwelle bei 5.5 belassen (zufällig derselbe Zahlenwert wie vor
+  dem Wechsel, weil beide Bibliotheken dieselbe Okapi-BM25-Formel in
+  ähnlicher Größenordnung berechnen).
+
+Gemessen mit dem committeten Reranker-Modell
+(`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) gegen einen Wegwerf-Index
+außerhalb des Repos, vor/nach dem Wechsel:
+
+| Metrik | Vorher (Chroma + `rank_bm25`) | Nachher (SQLite: FTS5 + `sqlite-vec`) |
+|---|---|---|
+| Tuning-Hit-Rate@5 | 91 % (30/33) | 91 % (30/33) — **exakt dieselben drei Misses** |
+| Holdout-Hit-Rate@5 | 100 % (15/15) | 100 % (15/15) |
+| Abstention-Rate | 50 % (7/14) | 57 % (8/14) |
+
+Die Abstention-Rate bewegt sich von 7/14 auf 8/14 — ein zusätzlicher
+False-Hit weniger. Bei 14 Fragen liegt eine einzelne Frage bei 7
+Prozentpunkten; das 95-%-Wilson-Intervall für beide Werte überlappt
+deutlich (7/14: [27 %, 73 %]; 8/14: [33 %, 79 %]), die Differenz ist also
+nicht von Rauschen zu unterscheiden. Ehrlich berichtet als „kein Nachteil,
+vermutlich kein echter Vorteil" statt als Verbesserung verkauft.
+
+Strukturell hat der Wechsel den dokumentierten Schmerzpunkt „Chroma mutiert
+committete Indexdateien beim bloßen Öffnen" beseitigt — nicht durch
+Disziplin (`git restore data/index/` vor jedem Commit), sondern durch
+Wegfall der Prämisse: `data/index/` ist seit diesem Wechsel nicht mehr
+versioniert (siehe `.gitignore`), sondern wird bei Bedarf lokal bzw. im
+Docker-Build und in CI neu erzeugt (`python -m pipeline.index`, kostenlos —
+das Embedding-Modell läuft lokal).
 
 ### Held-out-Validierung
 
@@ -662,27 +724,33 @@ nie, er liest ausschließlich den versionierten Index.
 python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt
 # .env anlegen (siehe .env.example) und ANTHROPIC_API_KEY eintragen
+python -m pipeline.index   # baut data/index/hybrid.db aus data/corpus.json
 .venv/Scripts/uvicorn app.main:app --port 8000
 ```
 
 Danach `http://localhost:8000` im Browser öffnen.
 
-Chroma verändert Index-Dateien unter `data/index/` schon beim bloßen Öffnen
-(z. B. durch lokales Starten oder Testläufe) — solche unstaged Änderungen
-mit `git restore data/index/` verwerfen, bevor committet wird.
+`data/index/` ist nicht versioniert (siehe `.gitignore`) — der erste Start
+(und jeder Testlauf) braucht deshalb einmal `python -m pipeline.index`, sonst
+findet `Retriever.__init__` keine `hybrid.db`. Frühere Versionen committeten
+den Index; Chroma veränderte die Datei dabei schon beim bloßen Öffnen, was
+einen `git restore data/index/`-Tanz vor jedem Commit erzwang. Mit dem
+Wechsel auf SQLite (FTS5 + sqlite-vec) und dem Wegfall des Commits entfällt
+das Problem durch Wegfall der Prämisse, nicht durch Disziplin.
 
 ## Pipeline neu bauen
 
 Nur nötig, wenn sich die Chrono24-Hilfeseiten geändert haben oder der Index
-neu erzeugt werden soll:
+neu erzeugt werden soll (kostenlos — das Embedding-Modell läuft lokal, kein
+API-Call):
 
 ```bash
 python -m pipeline.scrape && python -m pipeline.parse && python -m pipeline.index
 ```
 
-Bei einem chromadb-Upgrade (Version in `requirements.txt`) muss der Index
-danach neu gebaut werden — das committete Format ist an die gepinnte Version
-gekoppelt.
+Ein laufender `uvicorn`-Prozess hält `data/index/hybrid.db` unter Windows
+offen (SQLite-Datei-Lock) — vor einem Reindex den Server stoppen, sonst
+schlägt das `unlink()` im Build fehl.
 
 ## Tests
 
@@ -701,8 +769,9 @@ python -m eval.run_eval
 Zwei automatisierte Qualitäts-Regressionstests in `.github/workflows/ci.yml`,
 zusätzlich zu ruff/pytest/Docker-Build:
 
-- **`eval-gate`** (jeder PR und jeder Push auf main, keine API-Kosten): lädt
-  den committeten Index und prüft Hit-Rate@5 gegen Tuning- und
+- **`eval-gate`** (jeder PR und jeder Push auf main, keine API-Kosten): baut
+  den Index lokal (`python -m pipeline.index`, Embedding läuft ohne API-Call)
+  und prüft Hit-Rate@5 gegen Tuning- und
   Holdout-Fragen sowie die Abstention-Rate gegen themenfremde Fragen
   (`eval/questions_offtopic.json`). Unter der jeweiligen Mindestschwelle
   (`eval/run_eval.py::TUNING_MIN_HIT_RATE` / `HOLDOUT_MIN_HIT_RATE` /

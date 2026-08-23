@@ -38,6 +38,9 @@ jobs:
           restore-keys: |
             hf-models-
       - run: pip install -r requirements-dev.txt
+      # Index wird nicht mehr committet (siehe README, "Pipeline neu bauen") --
+      # ohne API-Kosten, Embedding laeuft lokal.
+      - run: python -m pipeline.index
       - run: python -m eval.run_eval --gate
 
   quality-gate:
@@ -82,6 +85,9 @@ jobs:
             hf-models-
       - if: steps.scope.outputs.run == 'true'
         run: pip install -r requirements-dev.txt
+      # Index wird nicht mehr committet -- ohne API-Kosten, Embedding laeuft lokal.
+      - if: steps.scope.outputs.run == 'true'
+        run: python -m pipeline.index
       - if: steps.scope.outputs.run == 'true'
         run: python -m eval.judge --gate
         env:

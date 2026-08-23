@@ -1,12 +1,12 @@
-"""Hybrid-Retrieval: BM25 + Vektorsuche, fusioniert per Reciprocal Rank Fusion."""
+"""Hybrid-Retrieval: FTS5-BM25 + sqlite-vec, fusioniert per Reciprocal Rank Fusion."""
 from __future__ import annotations
 
 import json
-import pickle
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-import chromadb
+import sqlite_vec
 
 from app.config import settings
 from app.textproc import expand_query
@@ -28,9 +28,17 @@ RRF_K = 60
 # Die restlichen 7 sind absichtlich nah am Domänenvokabular (Omega-Wert,
 # eBay-Vergleich) -- dort muss der LLM-Prompt bzw. der Faithcheck greifen.
 # Margen sind dünn (BM25 5.5 vs. 6.36); eval-gate in CI misst die Rate.
+#
+# sqlite-vec liefert mit distance_metric=cosine direkt 1 - Cosine-Similarity
+# fuer normalisierte Vektoren (gemessen, siehe corpus-storage-rethink-design.md
+# Schritt 2) -- SIM_THRESHOLD behaelt seine Bedeutung unveraendert.
 SIM_THRESHOLD = 0.40
-# Absolutwert, hängt an Korpusgröße und IDF -- gilt für data/corpus.json
-# (313 Dokumente). Kleine Testkorpora übergeben eine eigene Schwelle.
+# FTS5s eingebautes bm25() hat eine andere Skala/Vorzeichen als
+# rank_bm25.BM25Okapi.get_scores() (kleiner/negativer = relevanter). Um die
+# "hoeher = relevanter, Schwelle ist eine Untergrenze"-Semantik ueberall im
+# Code beizubehalten, negiert der Retriever den FTS5-Score bei der Abfrage
+# (best_bm25 = -bm25(...)). BM25_THRESHOLD ist deshalb neu kalibriert, siehe
+# README ("Warum Hybrid-RAG", Engine-Wechsel-Eintrag) fuer die Messung.
 BM25_THRESHOLD = 5.5
 RERANK_THRESHOLD = -6.0
 # Varianten teilen sich sonst die n Rohplätze: bei bis zu MAX_VARIANTS_PER_DOC
@@ -85,6 +93,26 @@ def _default_reranker():
     return lambda query, texts: [float(s) for s in model.predict([(query, t) for t in texts])]
 
 
+def _connect(db_path: Path) -> sqlite3.Connection:
+    db = sqlite3.connect(str(db_path))
+    db.enable_load_extension(True)
+    sqlite_vec.load(db)
+    db.enable_load_extension(False)
+    return db
+
+
+def _fts5_match_query(tokens: list[str]) -> str | None:
+    """Baut eine FTS5-MATCH-Abfrage mit ODER-Semantik (wie BM25Okapi.get_scores).
+
+    Jedes Token wird gequotet -- verhindert, dass ein Token als FTS5-Operator
+    (AND/OR/NOT/NEAR, gross geschrieben) oder Spaltenfilter interpretiert wird;
+    tokenize() liefert ohnehin nur [a-zäöüß0-9]+, also nie ein Anfuehrungszeichen.
+    """
+    if not tokens:
+        return None
+    return " OR ".join(f'"{t}"' for t in tokens)
+
+
 class Retriever:
     def __init__(self, index_dir: Path, corpus_path: Path, encoder=None, reranker=None,
                  sim_threshold: float = SIM_THRESHOLD,
@@ -99,55 +127,85 @@ class Retriever:
             self.reranker = None
         else:
             self.reranker = reranker or _default_reranker()
-        client = chromadb.PersistentClient(path=str(index_dir / "chroma"))
-        self.collection = client.get_collection("docs")
-        with open(index_dir / "bm25.pkl", "rb") as f:
-            data = pickle.load(f)
-        self.bm25 = data["bm25"]
-        self.doc_ids: list[str] = data["doc_ids"]
-        corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+        self.db = _connect(Path(index_dir) / "hybrid.db")
+        corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
         self.docs = {d["id"]: d for d in corpus["documents"]}
+
+    def _vector_candidates(
+        self, query: str, n: int, total: int, audience: str | None
+    ) -> tuple[list[str], float]:
+        if not total or not n:
+            return [], 0.0
+        # Überfetchen: die Tabelle enthält jetzt auch Varianten-Einträge, von
+        # denen bis zu MAX_VARIANTS_PER_DOC pro FAQ auf denselben canonical_id-
+        # Kandidaten zurückfallen. Erst nach der Dedupe unten auf n kappen,
+        # sonst verdrängen sich Varianten derselben FAQ gegenseitig aus den n
+        # Rohplätzen.
+        fetch_n = min(n * (1 + MAX_VARIANTS_PER_DOC), total)
+        query_vec = sqlite_vec.serialize_float32(list(self.encoder(query)))
+        # Harter Pre-Filter direkt als SQL-WHERE auf der audience-Partition
+        # (Schritt 1 des Rollenfilters, jetzt in der DB statt in Python) --
+        # "neutral" passiert für beide Rollen, siehe Kommentar an retrieve().
+        if audience in ("kaeufer", "verkaeufer"):
+            rows = self.db.execute(
+                "SELECT canonical_id, distance FROM vectors "
+                "WHERE embedding MATCH ? AND k = ? AND audience IN (?, 'neutral') "
+                "ORDER BY distance",
+                (query_vec, fetch_n, audience),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT canonical_id, distance FROM vectors "
+                "WHERE embedding MATCH ? AND k = ? ORDER BY distance",
+                (query_vec, fetch_n),
+            ).fetchall()
+        ranking = _dedupe_ranking([r[0] for r in rows])[:n]
+        best_sim = 1.0 - rows[0][1] if rows else 0.0
+        return ranking, best_sim
+
+    def _bm25_candidates(
+        self, query: str, n: int, audience: str | None
+    ) -> tuple[list[str], float]:
+        # Synonym-Expansion nur hier: BM25 braucht exakte Wortformen, die
+        # Embeddings matchen Bedeutung auch ohne Hilfe.
+        match_query = _fts5_match_query(expand_query(query))
+        if match_query is None or not n:
+            return [], 0.0
+        if audience in ("kaeufer", "verkaeufer"):
+            rows = self.db.execute(
+                "SELECT doc_id, bm25(bm25_docs) FROM bm25_docs "
+                "WHERE bm25_docs MATCH ? AND audience IN (?, 'neutral') "
+                "ORDER BY bm25(bm25_docs) LIMIT ?",
+                (match_query, audience, n),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT doc_id, bm25(bm25_docs) FROM bm25_docs "
+                "WHERE bm25_docs MATCH ? ORDER BY bm25(bm25_docs) LIMIT ?",
+                (match_query, n),
+            ).fetchall()
+        ranking = [r[0] for r in rows]
+        # FTS5-Vorzeichen umgedreht (siehe Kommentar an BM25_THRESHOLD oben):
+        # kleiner/negativer roher bm25()-Wert wird zu einem groesseren,
+        # positiveren best_bm25 -- "hoeher = relevanter" bleibt ueberall gueltig.
+        best_bm25 = -rows[0][1] if rows else 0.0
+        return ranking, best_bm25
 
     def retrieve(self, query: str, top_k: int = 5,
                  audience: str | None = None) -> list[RetrievedDoc]:
-        n = min(TOP_K_CANDIDATES, len(self.doc_ids))
-        # Überfetchen: die Collection enthält jetzt auch Varianten-Einträge,
-        # von denen bis zu MAX_VARIANTS_PER_DOC pro FAQ auf denselben
-        # canonical_id-Kandidaten zurückfallen. Erst nach der Dedupe unten
-        # auf n kappen, sonst verdrängen sich Varianten derselben FAQ
-        # gegenseitig aus den n Rohplätzen.
-        fetch_n = min(n * (1 + MAX_VARIANTS_PER_DOC), self.collection.count())
-        res = self.collection.query(
-            query_embeddings=[list(self.encoder(query))], n_results=fetch_n,
-            include=["metadatas", "distances"],
-        )
-        # Ältere Indexstände tragen keine Metadaten (Chroma liefert dann None).
-        # Dort ist die Dokument-ID selbst schon die kanonische.
-        vector_ranking = _dedupe_ranking([
-            (meta or {}).get("canonical_id", doc_id)
-            for meta, doc_id in zip(res["metadatas"][0], res["ids"][0])
-        ])[:n]
-        best_sim = 1.0 - res["distances"][0][0] if res["distances"][0] else 0.0
-
-        # Synonym-Expansion nur hier: BM25 braucht exakte Wortformen, die
-        # Embeddings matchen Bedeutung auch ohne Hilfe.
-        bm25_scores = self.bm25.get_scores(expand_query(query))
-        order = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
-        bm25_ranking = [self.doc_ids[i] for i in order[:n] if bm25_scores[i] > 0]
-        best_bm25 = bm25_scores[order[0]] if len(order) else 0.0
+        total = self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+        n = min(TOP_K_CANDIDATES, total)
 
         # Harter Pre-Filter vor der RRF-Fusion (kein Score-Abzug): Kandidaten
         # der falschen Rolle fliegen aus beiden Rankings komplett raus, statt
         # nur schlechter bewertet zu werden -- Unterschied zum verworfenen
         # weichen Rollen-Malus (siehe README). Nur bei eindeutiger
         # Klassifikation aktiv; "neutral" (Default bei Dokumenten ohne Feld)
-        # passiert den Filter für beide Rollen.
-        if audience in ("kaeufer", "verkaeufer"):
-            def _matches_audience(doc_id: str) -> bool:
-                return self.docs[doc_id].get("audience", "neutral") in (audience, "neutral")
-
-            vector_ranking = [doc_id for doc_id in vector_ranking if _matches_audience(doc_id)]
-            bm25_ranking = [doc_id for doc_id in bm25_ranking if _matches_audience(doc_id)]
+        # passiert den Filter für beide Rollen. Jetzt als SQL-WHERE in beiden
+        # Teil-Queries statt Python-seitigem Filtern (Schritt 2, siehe
+        # corpus-storage-rethink-design.md).
+        vector_ranking, best_sim = self._vector_candidates(query, n, total, audience)
+        bm25_ranking, best_bm25 = self._bm25_candidates(query, n, audience)
 
         # Stufe 1 des Gates: billig, vor dem Reranker.
         if best_sim < self.sim_threshold or best_bm25 < self.bm25_threshold:

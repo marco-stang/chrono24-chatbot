@@ -3,6 +3,10 @@ __pycache__/
 .env
 data/raw/
 data/budget.sqlite3
+# Index wird beim Docker-Build und in CI lokal neu erzeugt (siehe
+# docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md
+# Schritt 2) statt committet -- kein "Chroma mutiert beim Öffnen"-Problem mehr.
+data/index/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/

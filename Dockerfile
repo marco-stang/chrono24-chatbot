@@ -12,9 +12,15 @@ RUN python -c "from sentence_transformers import CrossEncoder; \
     CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')"
 
 COPY app/ app/
+COPY pipeline/ pipeline/
 COPY static/ static/
 COPY data/corpus.json data/corpus.json
-COPY data/index/ data/index/
+COPY data/variants.json data/variants.json
+
+# Index wird beim Build lokal aus dem Corpus erzeugt (Embedding laeuft ohne
+# API-Call), nicht mehr committet -- siehe
+# docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md Schritt 2.
+RUN python -m pipeline.index
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips=*"]

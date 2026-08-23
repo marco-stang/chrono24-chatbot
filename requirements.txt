@@ -1,10 +1,12 @@
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 anthropic==0.125.0
-# chromadb-Version fixiert: schützt das im Repo committete Index-Format
-# (data/index/chroma) vor stillen Breaking Changes bei Upgrades.
-chromadb==1.5.9
 sentence-transformers==6.0.0
-rank-bm25==0.2.2
+# Hybrid-Index (FTS5 fuer BM25 nativ + vec0 fuer Vektorsuche) in einer SQLite-
+# Datei, siehe docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md
+# Schritt 2. Index wird nicht mehr committet, sondern beim Docker-Build und in
+# CI neu erzeugt -- Versions-Pinning schuetzt trotzdem vor stillen
+# Breaking Changes am vec0-Schema zwischen lokalem Build und Deploy.
+sqlite-vec==0.1.9
 slowapi==0.1.10
 pydantic-settings==2.15.0
