@@ -108,6 +108,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: stärkerer Reranker `bge-reranker-v2-m3` (568M) | 0 von 3 Misses gelöst, Latenz 0,7 s → 6,7–10,9 s |
 | verworfen: Embedder `multilingual-e5-base` statt MiniLM (Merge-Schwelle fair kalibriert) | 91 % / 100 %, **exakt dieselben drei Misses** |
 | verworfen: Doc2Query — generierte Fragen auch für `page_chunks` (568 Stück) | 91 % / 100 %, unverändert |
+| verworfen: FAQ-Kategorie in den **Embedding**-Text (statt nur Rerank-Text) | 91 % / 100 %, dieselben drei Misses |
+| verworfen: Kategorie bei allen Dokumenten im Embedding | 91 % / 100 %, dieselben drei Misses |
 | verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
 | verworfen: Rollen-Malus (Verkäufer-Frage wertet „Uhren kaufen"-Kategorien ab) | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 |
 
@@ -300,6 +302,39 @@ in den Fragen-JSONs — dasselbe Muster wie `data/variants.json`. Die
 Konsequenz steht offen dabei: es sind eingefrorene Umformulierungen, kein
 Live-Call. Ändert sich der Rewrite-Prompt, muss das Feld neu erzeugt
 werden, sonst misst die Eval wieder etwas anderes als Produktion.
+
+### Was diese Zahlen aushalten (Konfidenzintervalle)
+
+Alle Trefferquoten oben stammen aus kleinen Stichproben, und das begrenzt,
+was man aus ihnen lesen darf. 95-%-Wilson-Intervalle:
+
+| Zahl | Wert | 95-%-Intervall | Breite |
+|---|---|---|---|
+| Tuning-Hit-Rate@5 | 91 % (30/33) | [76 %, 97 %] | 20 pp |
+| Held-out-Hit-Rate@5 | 100 % (15/15) | [80 %, 100 %] | 20 pp |
+| Abstention-Rate | 50 % (7/14) | [27 %, 73 %] | 46 pp |
+
+Im Klartext: **„100 % auf dem Held-out-Set" heißt statistisch „mindestens
+80 %"** — 15 Fragen können nicht mehr belegen. Und die Abstention-Rate ist
+mit 46 Punkten Breite kaum mehr als eine Richtungsangabe. Der Unterschied
+zwischen 88 % und 94 % auf dem Tuning-Set, über den in diesem README
+mehrfach diskutiert wird, liegt vollständig innerhalb des Rauschens.
+
+Das ist auch der Grund, warum die Ablationstabelle so viele Einträge mit
+„neutral" trägt: bei 33 Fragen ist eine Änderung erst ab etwa 4 Fragen
+Unterschied überhaupt vom Zufall unterscheidbar. Alles darunter ist nicht
+messbar, egal wie plausibel die Idee klingt.
+
+Was das kosten würde zu beheben — bei gleicher Trefferquote von 91 %:
+
+| Fragen | Intervall | Breite |
+|---|---|---|
+| 33 (heute) | [76 %, 97 %] | 20 pp |
+| 100 | [84 %, 95 %] | 11 pp |
+| 150 | [85 %, 94 %] | 9 pp |
+
+Der ehrlichste offene Punkt dieses Projekts ist damit nicht die Hit-Rate,
+sondern die Stichprobengröße.
 
 ### Konfidenz-Gate für themenfremde Fragen
 
