@@ -47,3 +47,40 @@ def looks_german(text: str) -> bool:
         return True
     tokens = set(tokenize(text))
     return len(tokens & GERMAN_HINTS) >= len(tokens & ENGLISH_HINTS)
+
+
+# Wortstämme statt exakter Formen, weil beide Rollen zusammengesetzte Wörter
+# bilden ("Privatverkäufer", "Käuferschutz"), die als ganzes Token nie exakt
+# in einer Wortliste stünden. Kurze Stämme fangen sie per Teilstring-Test.
+# ACHTUNG geteiltes Vokabular: "kauf"/"käuf" stecken als Teilstring in
+# "verkauf"/"verkäuf" ("ver" + "kaufen" ist ein trennbares Verb) -- deshalb
+# prüft classify_audience() den Verkäufer-Stamm zuerst und zählt ein Token
+# nur einmal, sonst würde jedes "verkaufen" fälschlich auch als
+# Käufer-Treffer zählen.
+BUYER_HINTS = frozenset(["kauf", "käuf", "erwerb"])
+SELLER_HINTS = frozenset(["verkauf", "verkäuf", "anbiet", "inserier"])
+
+
+def classify_audience(text: str) -> str:
+    """Käufer/Verkäufer/neutral per Wortstamm-Mehrheit, kein LLM-Call.
+
+    Reine Keyword-Heuristik wie looks_german() oben: pro Token erst auf den
+    Verkäufer-Stamm prüfen (siehe Kommentar an SELLER_HINTS), sonst auf den
+    Käufer-Stamm. Nur bei eindeutigem Übergewicht eines Wortfelds wird eine
+    Rolle zurückgegeben -- bei Gleichstand oder ganz ohne Treffer "neutral",
+    denn ein falsch klassifiziertes "neutral" filtert nichts weg, ein falsch
+    klassifiziertes "kaeufer"/"verkaeufer" kann dagegen einen echten Treffer
+    aus der Kandidatenmenge werfen (harter Pre-Filter in Retriever.retrieve).
+    """
+    buyer_hits = 0
+    seller_hits = 0
+    for token in tokenize(text):
+        if any(stem in token for stem in SELLER_HINTS):
+            seller_hits += 1
+        elif any(stem in token for stem in BUYER_HINTS):
+            buyer_hits += 1
+    if buyer_hits > seller_hits:
+        return "kaeufer"
+    if seller_hits > buyer_hits:
+        return "verkaeufer"
+    return "neutral"

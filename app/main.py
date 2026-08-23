@@ -15,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app import faithcheck, handover, llm
+from app import faithcheck, handover, llm, textproc
 from app.config import settings
 from app.guards import TokenBudget
 from app.retrieval import Retriever
@@ -100,7 +100,8 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
                 standalone, rewrite_tokens = await app.state.rewrite_fn(history, question, client)
                 if rewrite_tokens:
                     app.state.budget.spend(rewrite_tokens)
-                docs = app.state.retriever.retrieve(standalone)
+                audience = textproc.classify_audience(standalone)
+                docs = app.state.retriever.retrieve(standalone, audience=audience)
                 yield sse({"type": "retrieval",
                            "docs": [{"id": d.id, "title": d.title, "score": d.score,
                                      "rerank": d.rerank_score}

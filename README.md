@@ -112,6 +112,7 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: Kategorie bei allen Dokumenten im Embedding | 91 % / 100 %, dieselben drei Misses |
 | verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
 | verworfen: Rollen-Malus über die FAQ-**Kategorie**, weich, nach dem Ranking | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 — **kein harter Test der Rollen-Idee**, siehe unten |
+| neutral: `audience`-Feld als harter Pre-Filter, echter Ausschluss vor der RRF-Fusion | 91 % / 100 % — **exakt unverändert, beide Rollen-Misses bleiben Misses**, siehe unten |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -270,15 +271,63 @@ erreichen.
 Dass ein komplett anderes Modell an denselben drei Fällen scheitert, ist das
 stärkste Argument dafür, dass hier kein Modell von der Stange mehr hilft.
 
-**Eine Idee ist damit ausdrücklich nicht widerlegt.** Der oben verworfene
-Rollen-Malus benutzte die FAQ-Kategorie als Rollen-Ersatz und zog Punkte *nach*
-dem Ranking ab. Beides ist zu schwach für einen ehrlichen Test: 132 der 318
-Dokumente tragen überhaupt keine Kategorie — darunter ausgerechnet
-info-escrow-0007, einer der beiden Rollen-Fälle. Der Malus konnte dieses
-Dokument gar nicht erreichen. Ein eigenes `audience`-Feld (Käufer/Verkäufer/
-neutral) auf *allen* Dokumenten, als harter Filter *vor* der Fusion, ist eine
-andere Sache und noch offen — Design in
-`docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md`.
+**Diese Idee wurde inzwischen hart getestet — und hat die beiden Rollen-Misses
+nicht gelöst.** Der oben verworfene Rollen-Malus benutzte die FAQ-Kategorie
+als Rollen-Ersatz und zog Punkte *nach* dem Ranking ab. Beides war zu schwach
+für einen ehrlichen Test: 132 der 318 Dokumente tragen überhaupt keine
+Kategorie — darunter ausgerechnet info-escrow-0007, einer der beiden
+Rollen-Fälle. Der Malus konnte dieses Dokument gar nicht erreichen.
+
+Als härterer, anderer Mechanismus (Design in
+`docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md`): ein
+eigenes `audience`-Feld (`kaeufer`/`verkaeufer`/`neutral`) auf *allen* 318
+Dokumenten, per Wortstamm-Heuristik (`classify_audience()` in
+`app/textproc.py`, gleiches Muster wie `looks_german()`) plus einer kleinen
+Hand-Korrekturliste (`pipeline/populate_audience.py`, Prinzip wie
+`QUERY_SYNONYMS`) für Fälle, in denen die Heuristik die Gegenpartei öfter
+zählt als die eigentliche Rolle — z. B. alle 9 `info-escrow-*`-Chunks (die
+Seite hat einen Käufer- und einen separaten Verkäufer-Abschnitt) und, mit
+Blick auf die Tabelle oben, ausgerechnet die beiden falschen Konkurrenz-
+Dokumente selbst: faq-0019 und faq-0027 nennen "Verkäufer"/"Privatverkäufer"
+öfter als "kaufen", obwohl beide klar aus Käufersicht geschrieben sind, und
+wurden ohne Korrektur fälschlich als `verkaeufer` eingestuft — der Filter
+hätte sie sonst gar nicht als Konkurrenten erkannt. `Retriever.retrieve()`
+schneidet damit beide Ranglisten (BM25 und Vektor) *vor* der RRF-Fusion auf
+Dokumente der passenden Rolle zu — echter Ausschluss, kein Score-Abzug. Ein
+eigener Testfall pinnt den Mechanismus (`tests/test_retrieval.py::
+test_retrieve_with_audience_excludes_wrong_role`): ein Verkäufer-Dokument
+verschwindet komplett, sobald `audience="kaeufer"` gesetzt ist.
+
+Gemessen mit aktivem Filter (`eval.run_eval.hit_rate_at_k_with_audience`,
+Query-Rolle per `classify_audience()`): **Tuning 91 % (30/33), Holdout 100 %
+(15/15) — exakt dieselben Zahlen wie ohne Filter, und dieselben drei Misses**,
+faq-0098 und info-escrow-0007 eingeschlossen. Der Filter tut nachweislich,
+was er soll — faq-0019 und faq-0027 verschwinden aus den Kandidatenlisten
+beider Anfragen —, aber das reicht nicht:
+
+- Für „Muss ich als privater Verkäufer etwas bezahlen …?" bleibt faq-0098
+  auch nach dem Filter *Kandidat* (letzter Platz der RRF-Fusion, nur über den
+  BM25-Pfad), verliert aber gegen andere, korrekt als `verkaeufer`
+  eingestufte Dokumente (faq-0121, faq-0124, faq-0102 u. a.) — kein
+  Rollenproblem mehr, sondern dieselbe Reranker-Schwäche, die oben schon für
+  faq-0033 diagnostiziert ist.
+- Für „Worauf muss ich als Verkäufer achten, bevor ich … verschicke?" schafft
+  es info-escrow-0007 nach dem Filter nicht einmal mehr in die Top-10 der
+  RRF-Fusion: es liegt exakt gleichauf mit einem anderen Kandidaten auf dem
+  letzten Platz und verliert den Tiebreak an die Einfüge-Reihenfolge des
+  Vektor-Pfads (der zuerst verarbeitet wird). Eine Handvoll Punkte Marge, kein
+  strukturelles Versagen des Filters — aber eben auch kein Treffer.
+
+Der harte Filter behebt also nicht das ursprünglich diagnostizierte
+Kandidaten-Problem (README oben: „das Ziel steht im Vektor-Ranking auf Platz
+76 bzw. 130"), weil `TOP_K_CANDIDATES=10` beide Zieldokumente vektorseitig
+ohnehin nie erreicht — der Filter kann nur entfernen, was in den bereits auf
+n Plätze gekappten Ranglisten steht, nicht tiefer liegende Kandidaten
+nachrücken lassen. Ehrliches Fazit: der Mechanismus ist sauber implementiert
+und per Unit-Test bewiesen wirksam, löst aber auf dem tatsächlichen Eval-Set
+keinen der beiden Fälle, für die er gebaut wurde. Der Code bleibt additiv im
+Repo (`audience`-Parameter mit Default `None`, ohne Wirkung auf bestehende
+Aufrufer), weil er keine Regression verursacht — nur eben auch keinen Gewinn.
 
 Was darüber hinaus bliebe, ist Domänen-Finetuning auf
 Chrono24-Frage/Antwort-Paaren — begründeter Aufwand erst, wenn das Projekt

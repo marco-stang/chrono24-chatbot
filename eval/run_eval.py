@@ -59,6 +59,34 @@ def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, 
     return hits / len(questions), misses
 
 
+def hit_rate_at_k_with_audience(
+    retriever, questions: list[dict], k: int = 5
+) -> tuple[float, list[dict]]:
+    """Wie hit_rate_at_k, wendet aber vorher den harten audience-Filter aus
+    Retriever.retrieve() an (Schritt 1, corpus-storage-rethink-design.md) --
+    misst den tatsächlichen Live-Pfad, der in app/main.py nach dem Rewrite
+    ebenfalls textproc.classify_audience() auf die Standalone-Frage anwendet.
+
+    Additive eigene Funktion statt hit_rate_at_k selbst zu erweitern: die
+    StubRetriever-Fixture in tests/test_eval.py kennt kein audience-Kwarg,
+    hit_rate_at_k muss also unverändert bleiben (siehe Docstring in
+    Retriever.retrieve zur Rückwärtskompatibilität bestehender Aufrufer).
+    """
+    from app.textproc import classify_audience
+
+    misses = []
+    hits = 0
+    for item in questions:
+        query = eval_query(item)
+        audience = classify_audience(query)
+        ids = [d.id for d in retriever.retrieve(query, top_k=k, audience=audience)]
+        if item["expected_doc_id"] in ids:
+            hits += 1
+        else:
+            misses.append({**item, "got": ids, "audience": audience})
+    return hits / len(questions), misses
+
+
 def abstention_rate(retriever, questions: list[dict]) -> tuple[float, list[dict]]:
     """Anteil themenfremder Fragen, bei denen retrieve() korrekt leer zurückgibt.
 
@@ -130,8 +158,11 @@ if __name__ == "__main__":
         tuning = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
         holdout = json.loads(HOLDOUT_QUESTIONS_PATH.read_text(encoding="utf-8"))
         offtopic = json.loads(OFFTOPIC_QUESTIONS_PATH.read_text(encoding="utf-8"))
-        tuning_rate, _ = hit_rate_at_k(retriever, tuning)
-        holdout_rate, _ = hit_rate_at_k(retriever, holdout)
+        # Misst den harten audience-Filter mit (Schritt 1,
+        # corpus-storage-rethink-design.md) -- abstention_rate bleibt bewusst
+        # ohne Klassifikation, off-topic-Fragen haben keine Rolle.
+        tuning_rate, tuning_misses = hit_rate_at_k_with_audience(retriever, tuning)
+        holdout_rate, _ = hit_rate_at_k_with_audience(retriever, holdout)
         abstain_rate, false_hits = abstention_rate(retriever, offtopic)
         # Punktzahl plus 95-%-Intervall: bei 14 bis 33 Fragen sagt die Zahl
         # allein zu wenig, und ohne die Spanne daneben wird ueber Unterschiede
@@ -139,6 +170,9 @@ if __name__ == "__main__":
         print(f"Tuning-Hit-Rate@5:  {format_rate(round(tuning_rate * len(tuning)), len(tuning))}")
         print(f"Holdout-Hit-Rate@5: {format_rate(round(holdout_rate * len(holdout)), len(holdout))}")
         print(f"Abstention-Rate:    {format_rate(len(offtopic) - len(false_hits), len(offtopic))}")
+        for miss in tuning_misses:
+            print(f"  TUNING MISS ({miss['audience']}): {miss['question']!r} erwartet "
+                  f"{miss['expected_doc_id']}, bekam {miss['got']}")
         for false_hit in false_hits:
             print(f"  FALSE HIT: {false_hit['question']!r} -> "
                   f"{false_hit['got_id']} ({false_hit['got_title']!r})")

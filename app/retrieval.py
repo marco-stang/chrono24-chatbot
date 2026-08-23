@@ -108,7 +108,8 @@ class Retriever:
         corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
         self.docs = {d["id"]: d for d in corpus["documents"]}
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedDoc]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 audience: str | None = None) -> list[RetrievedDoc]:
         n = min(TOP_K_CANDIDATES, len(self.doc_ids))
         # Überfetchen: die Collection enthält jetzt auch Varianten-Einträge,
         # von denen bis zu MAX_VARIANTS_PER_DOC pro FAQ auf denselben
@@ -134,6 +135,19 @@ class Retriever:
         order = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)
         bm25_ranking = [self.doc_ids[i] for i in order[:n] if bm25_scores[i] > 0]
         best_bm25 = bm25_scores[order[0]] if len(order) else 0.0
+
+        # Harter Pre-Filter vor der RRF-Fusion (kein Score-Abzug): Kandidaten
+        # der falschen Rolle fliegen aus beiden Rankings komplett raus, statt
+        # nur schlechter bewertet zu werden -- Unterschied zum verworfenen
+        # weichen Rollen-Malus (siehe README). Nur bei eindeutiger
+        # Klassifikation aktiv; "neutral" (Default bei Dokumenten ohne Feld)
+        # passiert den Filter für beide Rollen.
+        if audience in ("kaeufer", "verkaeufer"):
+            def _matches_audience(doc_id: str) -> bool:
+                return self.docs[doc_id].get("audience", "neutral") in (audience, "neutral")
+
+            vector_ranking = [doc_id for doc_id in vector_ranking if _matches_audience(doc_id)]
+            bm25_ranking = [doc_id for doc_id in bm25_ranking if _matches_audience(doc_id)]
 
         # Stufe 1 des Gates: billig, vor dem Reranker.
         if best_sim < self.sim_threshold or best_bm25 < self.bm25_threshold:

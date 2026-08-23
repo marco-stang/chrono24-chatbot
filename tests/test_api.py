@@ -19,7 +19,7 @@ class FakeRetriever:
     def __init__(self, docs):
         self.docs = docs
 
-    def retrieve(self, query, top_k=5):
+    def retrieve(self, query, top_k=5, audience=None):
         return self.docs
 
 

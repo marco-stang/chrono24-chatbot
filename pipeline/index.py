@@ -26,13 +26,16 @@ def doc_search_text(doc: dict) -> str:
 
 
 def _doc_metadata(doc: dict) -> dict:
-    """Chroma-Metadaten eines Corpus-Dokuments: nur canonical_id.
+    """Chroma-Metadaten eines Corpus-Dokuments: canonical_id und audience.
 
     Die FAQ-Kategorie stand hier früher mit drin, ohne dass irgendein Code sie
     las (kein where-Filter, als Ranking-Signal gemessen neutral). Sie bleibt
-    im Corpus und kommt zurück, sobald ein Abnehmer existiert.
+    im Corpus und kommt zurück, sobald ein Abnehmer existiert. `audience`
+    dagegen wird bewusst schon jetzt indexiert (auch wenn Retriever.retrieve
+    den harten Filter aktuell selbst über self.docs nachschlägt statt über
+    Chroma-Metadaten) -- Schritt 2 (SQL-WHERE-Klausel) baut direkt darauf auf.
     """
-    return {"canonical_id": doc["id"]}
+    return {"canonical_id": doc["id"], "audience": doc.get("audience", "neutral")}
 
 
 # Ab dieser Cosine-Similarity gelten zwei page_chunks als inhaltsgleich.

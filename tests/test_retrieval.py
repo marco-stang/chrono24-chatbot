@@ -291,6 +291,43 @@ def test_gate_abstains_when_reranker_rejects_every_candidate(tmp_path):
     assert retriever.retrieve("Wie funktioniert der Käuferschutz?") == []
 
 
+def test_retrieve_with_audience_excludes_wrong_role(tmp_path):
+    """Harter Pre-Filter (Schritt 1, corpus-storage-rethink-design.md): ein
+    Verkaeufer-Dokument darf bei einer als 'kaeufer' klassifizierten Anfrage
+    gar nicht erst in die Kandidatenmenge -- echter Ausschluss vor der
+    RRF-Fusion, kein Score-Abzug wie beim verworfenen Rollen-Malus."""
+    docs = [
+        {"id": "faq-buyer", "type": "faq", "question": "Wie funktioniert der Schutz beim Kauf?",
+         "answer": "Der Käuferschutz sichert deine Zahlung ab.", "category": "Kaufen",
+         "audience": "kaeufer", "url": "https://www.chrono24.de/info/faqs.htm"},
+        {"id": "faq-seller", "type": "faq",
+         "question": "Wie funktioniert der Schutz beim Verkauf?",
+         "answer": "Der Verkäuferschutz sichert deine Auszahlung ab.", "category": "Verkaufen",
+         "audience": "verkaeufer", "url": "https://www.chrono24.de/info/faqs.htm"},
+    ]
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": docs}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    def encode(text):
+        return [1.0, 0.0, 0.0]  # identisches Embedding -- Vektor-Pfad findet beide gleich gut
+
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False,
+                          bm25_threshold=float("-inf"))
+
+    # Ohne audience-Filter finden beide Rollen den gleichen Kandidatenpool.
+    docs_out = retriever.retrieve("Wie funktioniert der Schutz?")
+    assert {d.id for d in docs_out} == {"faq-buyer", "faq-seller"}
+
+    # Mit hartem Filter verschwindet das Verkaeufer-Dokument komplett.
+    docs_out = retriever.retrieve("Wie funktioniert der Schutz?", audience="kaeufer")
+    ids = [d.id for d in docs_out]
+    assert "faq-buyer" in ids
+    assert "faq-seller" not in ids
+
+
 def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
     """Leicht negative Rerank-Scores sind bei echten Treffern normal (on-topic
     Minimum gemessen -5.6) -- nur eindeutig unter der Schwelle wird verworfen."""
