@@ -68,6 +68,17 @@ def _category_for(item, chapter_name: str) -> str:
 
 
 def parse_faq_page(html: str, url: str) -> list[dict]:
+    """Ein Akkordeon-Item wird zu genau einem Dokument — Frage und Antwort bleiben ein Paar.
+
+    Bewusst KEIN `_split_long_text` hier, anders als in `parse_info_page`: die
+    natürliche Chunk-Grenze ist im FAQ-Bereich schon durch das Frage-Antwort-Paar
+    gegeben. Die Vektorsuche embeddet gezielt nur die Frage
+    (`pipeline/index.py::doc_embed_text`), ein Antwortfragment ohne seine Frage
+    verlöre also seinen Anker. Auch Reranker und LLM-Kontext bekommen beides
+    immer zusammen. `tests/test_parse_faq.py::test_parse_faq_never_splits_a_long_answer`
+    hält das fest — die längste echte Antwort im Korpus liegt bei 226 Wörtern,
+    weit unter jeder Splitting-Schwelle.
+    """
     soup = BeautifulSoup(html, "html.parser")
     docs: list[dict] = []
 
