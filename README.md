@@ -348,9 +348,32 @@ sich am Code etwas geändert hatte, und rote CI ohne Regression ist
 schlimmer als gar kein Gate, weil man aufhört hinzusehen. Das Gate fängt
 damit einen echten Einbruch, nicht das Rauschen.
 
-Zur Einordnung der Verteilung (Lauf 6): voll 25, teilweise 5, verweigert 3,
-nein 0. Rohdaten des ersten Laufs in `eval/judge_results.json`, die
-späteren stehen in den CI-Logs des `quality-gate`-Jobs.
+Ein Einzellauf trägt also nicht. Deshalb fünf Läufe am Stück, pro Frage
+ausgezählt — das trennt echte Fehler von Judge-Rauschen sauber:
+
+| | |
+|---|---|
+| Faithful-Rate je Lauf | 97 / 94 / 85 / 88 / 97 % |
+| Mittel über 5 Läufe | **92,1 %** |
+| Fragen nie beanstandet | 27 von 33 |
+| Fragen in 4 von 5 Läufen beanstandet | 2 |
+| Fragen in genau 1 von 5 Läufen beanstandet | 3 |
+
+Die drei „1 von 5"-Fälle sind Rauschen — sie werden in den anderen vier
+Läufen als „voll" und treu bewertet. Die beiden hartnäckigen Fälle sind
+echt, und einer davon ist aufschlussreich: **„What exactly is the Certified
+program on Chrono24?" wird 4× als nicht treu und 4× als „nein beantwortet"
+gewertet — das ist einer der drei Retrieval-Misses von oben.** Der Bot kann
+nicht belegen, was das Retrieval ihm nie gezeigt hat. Dasselbe gilt
+abgeschwächt für die Überweisungs-Frage (2 von 5, davon 3× „verweigert").
+
+Retrieval-Fehler und Faithfulness sind hier also keine getrennten Metriken:
+zwei der drei reproduzierbaren Faithfulness-Treffer sind direkte Folge der
+drei Retrieval-Misses. Wer die Reranker-Fehlurteile oben behebt, hebt beide
+Zahlen gleichzeitig.
+
+Rohdaten des ersten Laufs in `eval/judge_results.json`, die späteren stehen
+in den CI-Logs des `quality-gate`-Jobs.
 
 Nicht jeder Treffer ist Rauschen. Aus Lauf 2 stammt ein echter inhaltlicher
 Fehler: Auf die Frage nach der französischen Meldepflicht dreht die

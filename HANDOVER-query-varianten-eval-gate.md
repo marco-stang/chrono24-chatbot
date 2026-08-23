@@ -215,6 +215,49 @@ kein Gate, weil man aufhört hinzusehen.
 Die README-Zahl „100 % (33/33)" ist ersetzt: dort steht jetzt die Tabelle aller sechs Läufe
 mit Temperatur-Setup.
 
+### 8. Wie gut ist die Pipeline wirklich? (Messrunde 23.08. abends)
+
+**Stand:** Tuning-Hit-Rate@5 **91 %** (30/33), Held-out **100 %** (15/15), Abstention
+**50 %** (7/14), Faithful-Rate **92,1 %** im Mittel über fünf Läufe (Spanne 85–97 %).
+
+Drei Befunde, in dieser Reihenfolge entstanden:
+
+**a) Die Eval maß einen Pfad, den es nicht gibt.** Der Live-Bot schickt nicht-deutsche
+Fragen durch `rewrite_query`, die Eval tat das nicht. BM25 gibt einer englischen Query auf
+deutschem Korpus exakt 0. Behoben (`688472c`): fünf Umformulierungen offline erzeugt, als
+Feld `rewritten` in den Fragen-JSONs, `eval_query()` nimmt sie. Held-out 93 % → 100 %.
+**Das ist eine korrigierte Messung, kein Fortschritt am System** — steht so auch im README.
+
+**b) Die drei Tuning-Misses sind Reranker-Fehlurteile, keine Retrieval-Lücken.** Bei
+`TOP_K_CANDIDATES=25` liegen alle drei Zieldokumente in der Kandidatenmenge; der
+Cross-Encoder stuft sie negativ (−5,65 / −4,69 / −0,05) und zieht stattdessen Dokumente
+hoch, die dasselbe Vokabular tragen, aber **die andere Rolle adressieren** — beide Fragen
+sind aus Verkäufersicht gestellt, beide Sieger sind Käufer-Dokumente. Das mehrsprachige
+MS-MARCO-Modell kennt die Unterscheidung nicht. Die Gold-Labels sind nachgeprüft und
+korrekt: faq-0098 nennt wörtlich die 6,5 % Provision, info-escrow-0007 sagt wörtlich
+„prüfen Sie den Zahlungseingang, bevor Sie versenden".
+
+**c) Retrieval- und Faithfulness-Fehler sind dieselben Fälle.** Fünf Judge-Läufe pro Frage
+ausgezählt: 27 von 33 Fragen nie beanstandet, drei Fälle sind reines Rauschen (1 von 5),
+und **zwei der drei reproduzierbaren Unfaithful-Fälle sind exakt die Retrieval-Misses** —
+„Certified" 4/5 (4× „nein beantwortet"), „Überweisung" 2/5 (3× „verweigert"). Der Bot kann
+nicht belegen, was ihm nie gezeigt wurde. Ein besserer Reranker hebt beide Zahlen.
+
+**Zwei Auswege gemessen und verworfen** (jetzt in der README-Ablationstabelle):
+
+| Versuch | Ergebnis |
+|---|---|
+| `TOP_K_CANDIDATES` 15/20/25/30/40 | Tuning 91 % bis k=25, dann 88 → 85 %; Abstention 50 % → **43 %** |
+| Reranker nur als *ein* Signal (RRF über Rerank- und Fusionsrang, k=5/20/60) | neutral bis −3 pp |
+
+Der Status quo (`TOP_K_CANDIDATES=10`, Sortierung allein nach Rerank-Score) ist unter allen
+getesteten Varianten das Optimum.
+
+**Der nächste echte Hebel ist ein stärkerer Reranker** — und das ist eine
+Deploy-Entscheidung, kein Parameter: der Free-Tier trägt Embedding- plus Reranker-Modell
+schon jetzt nur knapp (siehe `## Deployment` im README). Vor dem Wechsel gegen beide Sets
+messen und die Abstention-Rate mitprüfen.
+
 ## Bewusst nicht gemacht
 
 - **Chunking angefasst.** Die längste FAQ-Antwort im Korpus hat **226 Wörter** (Median 47,
@@ -267,7 +310,7 @@ mit Temperatur-Setup.
 | Konstante | Wert | Datei |
 |---|---|---|
 | `TUNING_MIN_HIT_RATE` | 0.85 | `eval/run_eval.py` |
-| `HOLDOUT_MIN_HIT_RATE` | 0.80 | `eval/run_eval.py` |
+| `HOLDOUT_MIN_HIT_RATE` | 0.86 | `eval/run_eval.py` |
 | `MIN_ABSTENTION_RATE` | 0.35 | `eval/run_eval.py` |
 | `MIN_FAITHFUL_RATE` | 0.82 | `eval/judge.py` |
 | `TOP_K_CANDIDATES` | 10 | `app/retrieval.py` |
