@@ -39,7 +39,11 @@ def make_retriever(tmp_path, reranker):
                            encoding="utf-8")
     index_dir = tmp_path / "index"
     build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
-    return Retriever(index_dir, corpus_path, encoder=encode_one, reranker=reranker)
+    # BM25-Absolutwerte skalieren mit der Korpusgroesse: im 3-Dokument-Korpus
+    # liegt ein echter Treffer bei ~1.9, die Produktionsschwelle (5.5, auf
+    # 313 Dokumente gemessen) wuerde hier alles abweisen.
+    return Retriever(index_dir, corpus_path, encoder=encode_one, reranker=reranker,
+                     bm25_threshold=1.0)
 
 
 @pytest.fixture()
@@ -127,7 +131,9 @@ def test_variant_hit_resolves_to_canonical_doc(tmp_path):
     index_dir = tmp_path / "index"
     build_index(corpus_path, index_dir, encoder=lambda texts: [encode(t) for t in texts],
                 variants_path=variants_path)
-    retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False)
+    # BM25-Gate aus: in Mini-Korpora wird der IDF negativ, hier zaehlt nur der Vektorpfad.
+    retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False,
+                          bm25_threshold=float("-inf"))
 
     docs_out = retriever.retrieve("Was deckt der Kaeuferschutz ab?", top_k=5)
     assert docs_out[0].id == "faq-0001"
@@ -188,7 +194,8 @@ def test_retrieve_falls_back_to_doc_id_when_metadata_missing(tmp_path):
     with open(index_dir / "bm25.pkl", "wb") as f:
         pickle.dump({"doc_ids": ids, "bm25": bm25}, f)
 
-    retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False)
+    retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False,
+                          bm25_threshold=float("-inf"))
 
     # Sollte nicht crashen und das richtige Dokument zurückgeben
     docs_out = retriever.retrieve("Wie funktioniert der Käuferschutz?", top_k=5)
@@ -241,10 +248,54 @@ def test_vector_path_yields_n_distinct_canonical_docs_after_dedupe(tmp_path):
 
     retriever = Retriever(index_dir, corpus_path,
                           encoder=lambda text: list(vecmap.get(text, query_vec)),
-                          reranker=False)
+                          reranker=False, bm25_threshold=float("-inf"))
 
     # Fragetext kommt in keinem FAQ-Text vor -> BM25 traegt nichts bei, die
     # Rueckgabe-Reihenfolge stammt damit ausschliesslich aus dem Vektorpfad.
     docs_out = retriever.retrieve("Xylophon Quietscheentchen Zauberstab", top_k=num_faqs)
     ids = [d.id for d in docs_out]
     assert len(set(ids)) == num_faqs
+
+
+def test_gate_abstains_when_only_bm25_is_low(tmp_path):
+    """Off-Topic-Fragen in Fragesatzform erreichen beim multilingualen MiniLM hohe
+    Cosine-Similarity ("Wie backe ich einen Hefezopf?": 0.742) -- das Sim-Signal
+    allein kann sie nicht erkennen. BM25 sieht aber, dass kein Wort im Korpus
+    vorkommt. Ein einzelnes eindeutig schwaches Signal muss reichen (ODER-Gate),
+    sonst ist das Gate wirkungslos."""
+    def hefezopf_looks_like_faq(text):
+        # Embedding-Rauschen nachgestellt: Off-Topic-Frage landet auf faq-0001.
+        return [1.0, 0.0, 0.0] if "Hefezopf" in text else encode_one(text)
+
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=hefezopf_looks_like_faq,
+                          reranker=neutral_reranker, bm25_threshold=1.0)
+
+    assert retriever.retrieve("Wie backe ich einen Hefezopf?") == []
+    # Gegenprobe: eine echte Frage mit demselben Vektor bleibt durch.
+    assert retriever.retrieve("Wie funktioniert der Käuferschutz?")
+
+
+def test_gate_abstains_when_reranker_rejects_every_candidate(tmp_path):
+    """Nah am Domänenvokabular (Sim und BM25 beide hoch) bleibt der Cross-Encoder
+    das letzte Signal: liegt selbst sein bester Score unter RERANK_THRESHOLD,
+    passt kein Kandidat und der Bot antwortet leer statt zu raten."""
+    def rejects_all(query, texts):
+        return [-9.0 for _ in texts]
+
+    retriever = make_retriever(tmp_path, reranker=rejects_all)
+    assert retriever.retrieve("Wie funktioniert der Käuferschutz?") == []
+
+
+def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
+    """Leicht negative Rerank-Scores sind bei echten Treffern normal (on-topic
+    Minimum gemessen -5.6) -- nur eindeutig unter der Schwelle wird verworfen."""
+    def unsure(query, texts):
+        return [-5.0 for _ in texts]
+
+    retriever = make_retriever(tmp_path, reranker=unsure)
+    assert retriever.retrieve("Wie funktioniert der Käuferschutz?")

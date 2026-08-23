@@ -13,10 +13,26 @@ from app.textproc import expand_query
 
 TOP_K_CANDIDATES = 10
 RRF_K = 60
-# Konfidenz-Gate: liegen BEIDE Signale unter ihrer Schwelle, gilt die Frage als
-# themenfremd und es gibt keinen LLM-Call. Nach Task 10 (Eval) nachjustieren.
-SIM_THRESHOLD = 0.35
-BM25_THRESHOLD = 4.0
+# Konfidenz-Gate, ODER-verknüpft: reicht EIN Signal eindeutig nicht, gilt die
+# Frage als themenfremd und es gibt keinen LLM-Call. Die frühere UND-Logik
+# (sim<0.35 UND bm25<4.0) feuerte auf dem Off-Topic-Set nie (0/14), weil das
+# multilinguale MiniLM schon für reine Fragesatzform hohe Cosine-Similarity
+# liefert: "Wie backe ich einen Hefezopf?" erreicht 0.742, mehr als acht echte
+# Fachfragen. Gemessen auf 48 on-topic- und 14 Off-Topic-Fragen
+# (eval/questions*.json, Stand 2026-08-23):
+#   Cosine-Sim   on-topic min 0.607   off-topic max 0.773
+#   BM25         on-topic min 6.36    off-topic max 20.96
+#   Rerank-Max   on-topic min -5.6    off-topic max -0.19 (Median -5.2)
+# Kein Signal trennt allein; die drei Schwellen liegen je unter dem on-topic-
+# Minimum und fangen zusammen 7/14 Off-Topic-Fragen bei 0 verlorenen Treffern.
+# Die restlichen 7 sind absichtlich nah am Domänenvokabular (Omega-Wert,
+# eBay-Vergleich) -- dort muss der LLM-Prompt bzw. der Faithcheck greifen.
+# Margen sind dünn (BM25 5.5 vs. 6.36); eval-gate in CI misst die Rate.
+SIM_THRESHOLD = 0.40
+# Absolutwert, hängt an Korpusgröße und IDF -- gilt für data/corpus.json
+# (313 Dokumente). Kleine Testkorpora übergeben eine eigene Schwelle.
+BM25_THRESHOLD = 5.5
+RERANK_THRESHOLD = -6.0
 # Varianten teilen sich sonst die n Rohplätze: bei bis zu MAX_VARIANTS_PER_DOC
 # Umformulierungen je FAQ kollabieren sie nach der canonical_id-Dedupe wieder
 # auf einen Kandidaten. Deshalb überfetchen und erst nach der Dedupe kappen —
@@ -70,8 +86,14 @@ def _default_reranker():
 
 
 class Retriever:
-    def __init__(self, index_dir: Path, corpus_path: Path, encoder=None, reranker=None):
+    def __init__(self, index_dir: Path, corpus_path: Path, encoder=None, reranker=None,
+                 sim_threshold: float = SIM_THRESHOLD,
+                 bm25_threshold: float = BM25_THRESHOLD,
+                 rerank_threshold: float = RERANK_THRESHOLD):
         """reranker: Callable[(query, texts) -> scores] | None (Default-Modell) | False (aus)."""
+        self.sim_threshold = sim_threshold
+        self.bm25_threshold = bm25_threshold
+        self.rerank_threshold = rerank_threshold
         self.encoder = encoder or _default_encoder()
         if reranker is False:
             self.reranker = None
@@ -113,7 +135,8 @@ class Retriever:
         bm25_ranking = [self.doc_ids[i] for i in order[:n] if bm25_scores[i] > 0]
         best_bm25 = bm25_scores[order[0]] if len(order) else 0.0
 
-        if best_sim < SIM_THRESHOLD and best_bm25 < BM25_THRESHOLD:
+        # Stufe 1 des Gates: billig, vor dem Reranker.
+        if best_sim < self.sim_threshold or best_bm25 < self.bm25_threshold:
             return []
 
         fused = rrf_fuse([vector_ranking, bm25_ranking])
@@ -124,6 +147,10 @@ class Retriever:
             for doc, score in zip(docs, scores):
                 doc.rerank_score = round(float(score), 4)
             docs.sort(key=lambda d: d.rerank_score, reverse=True)
+            # Stufe 2: passt selbst der beste Kandidat laut Cross-Encoder
+            # eindeutig nicht, lieber leer als raten.
+            if docs and docs[0].rerank_score < self.rerank_threshold:
+                return []
         return docs[:top_k]
 
     def _to_doc(self, doc_id: str, score: float) -> RetrievedDoc:

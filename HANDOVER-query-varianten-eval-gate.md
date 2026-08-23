@@ -1,7 +1,7 @@
 # Handover: Query-Varianten + CI Eval Gate
 
-**Stand:** 2026-08-23 · Branch `feat/query-varianten-eval-gate`, 12 Commits, **nicht gemerged**, nicht gepusht
-**Basis:** `main` bei `48da6e9` · 146 Tests grün · ruff sauber · Working Tree clean
+**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 13 Commits, **nicht gemerged**, nicht gepusht
+**Basis:** `main` bei `48da6e9` · 149 Tests grün · ruff sauber · Working Tree clean
 
 Plan: `docs/superpowers/plans/2026-08-23-query-varianten-eval-gate.md`
 
@@ -73,35 +73,45 @@ dedupen, dann auf `n` kappen. `TOP_K_CANDIDATES` blieb bewusst bei 10.
 
 ## Offene Entscheidungen (gehören dem Owner)
 
-### 1. Das Konfidenz-Gate ist wirkungslos — `SIM_THRESHOLD` kalibrieren?
+### 1. Konfidenz-Gate — **erledigt** (Commit 13)
 
-Das neue Off-Topic-Set (`eval/questions_offtopic.json`, 14 Fragen) misst
-**Abstention-Rate 0 % (0/14)**. Jede themenfremde Frage liefert Treffer, auch
-„Wie backe ich einen Hefezopf?" und „Wie kann ich mein Fahrrad polieren?".
+Ausgangslage: Abstention-Rate **0 % (0/14)** auf `eval/questions_offtopic.json`, auch
+„Hefezopf" und „Fahrrad polieren" bekamen Treffer. Die Handover-Vermutung „`SIM_THRESHOLD`
+kalibrieren" hat sich beim Messen als **nicht umsetzbar** erwiesen: Hefezopf hat Sim 0.742,
+on-topic-Minimum ist 0.607 — jede Sim-Schwelle, die ihn fängt, killt acht echte Fragen.
 
-Ursache: `SIM_THRESHOLD = 0.35` liegt **unter** dem Ähnlichkeits-Rauschboden des
-multilingualen MiniLM für kurze deutsche Fragesätze — selbst Kauderwelsch erreicht 0.366.
-Das war mit hoher Wahrscheinlichkeit **schon vor diesem Branch so**; die Varianten haben
-es nur messbar gemacht. Der alte Test dafür lief mit Fake-Vektoren und konnte es nie sehen.
+Signale einzeln vermessen (48 on-topic vs 14 off-topic, Wegwerf-Skript, Index per
+`git restore` zurückgesetzt):
 
-Nicht angefasst, weil es Verweigerungen gegen Antworten tauscht — eine Produktentscheidung.
-`MIN_ABSTENTION_RATE` steht deshalb bei `0.0`: eine Schwelle, die nie auslöst, aber Rate
-und Falschtreffer-Liste bei jedem CI-Lauf druckt. Wird `SIM_THRESHOLD` kalibriert, gehört
-die Schwelle mit nachgezogen.
+| Signal | on-topic min | off-topic max |
+|---|---|---|
+| Cosine-Sim | 0.607 | 0.773 |
+| BM25 | 6.36 | 20.96 |
+| Rerank-Max | -5.6 | -0.19 |
 
-**Wichtig für die Einordnung:** Verweigerung hat in diesem System drei unabhängige
-Schichten — das Retrieval-Konfidenz-Gate (Schicht 1, hier mit 0 % gemessen), den
-LLM-System-Prompt („Steht die Antwort nicht im Kontext, sage ehrlich…") und den
-Laufzeit-Faithcheck. Der LLM-as-Judge-Lauf weist 2 echte Verweigerungen aus, Schicht 2
-und 3 greifen also nachweislich. Kaputt ist nur die billigste Vorstufe.
+Kein Signal trennt allein; das eigentliche Problem war die **UND-Verknüpfung**: Hefezopf
+liegt per BM25 (3.79) klar unten, aber Sim rettete ihn. Umgebaut auf **ODER** mit drei
+Schwellen je unter dem on-topic-Minimum (`sim < 0.40 | bm25 < 5.5 | rerank < -6.0`):
+**7/14 = 50 % Abstention, 0 on-topic verloren, Hit-Rate unverändert 91 % / 93 %.**
+`MIN_ABSTENTION_RATE` auf 0.35 (Puffer: eine Frage = 7 Punkte). Die 7 Durchrutscher sind die
+gewollt domänennahen Fragen (Omega-Wert, eBay-Vergleich, Versicherung) — dort greifen
+Schicht 2 (Prompt) und 3 (Faithcheck), per Judge-Lauf belegt.
 
-### 2. README-Headline nachschärfen?
+Konstruktionsdetail: `Retriever` nimmt die drei Schwellen jetzt als Kwargs. Grund: BM25-
+Absolutwerte skalieren mit der Korpusgröße, im 3-Dokument-Testkorpus liegt ein echter
+Treffer bei ~1.9 und im 2-Dokument-Korpus wird der IDF negativ. Tests übergeben darum
+`bm25_threshold=1.0` bzw. `float("-inf")` für reine Vektorpfad-Tests.
 
-Das „Auf einen Blick"-Bullet sagt unqualifiziert „ohne Beleg sagt der Bot ehrlich
-‚weiß ich nicht'". Der neue Abschnitt `### Konfidenz-Gate für themenfremde Fragen`
-dokumentiert die 0 % weiter unten, aber die beiden sind nicht verlinkt, und der Abschnitt
-vermischt implizit „Retrieval-Gate-Abstinenz" mit dem Verweigerungsverhalten insgesamt.
-Wie die drei Schichten dort gewichtet werden, ist eine Aussage über das eigene Produkt.
+Dünne Stelle, bewusst dokumentiert: BM25 5.5 gegen on-topic-Minimum 6.36. Wächst der
+Korpus beim nächsten Scrape, Schwelle neu messen (Skript-Logik: je Frage `best_sim`,
+`best_bm25`, `max(rerank)` über alle drei Eval-Sets, dann Regeln gegen die Listen rechnen).
+
+### 2. README-Headline — **erledigt** (Commit 13)
+
+„Auf einen Blick"-Bullet nennt jetzt die drei Schichten und verlinkt auf den
+Konfidenz-Gate-Abschnitt; der Abschnitt trennt Retrieval-Gate-Abstinenz (Schicht 1, 50 %)
+explizit von Prompt (Schicht 2, 2 Verweigerungen im Judge-Lauf) und Faithcheck (Schicht 3)
+und trägt die Signal- und Regel-Tabellen mit Zahlen.
 
 ### 3. Merge / Push / Repo public?
 
@@ -120,7 +130,8 @@ Docker war die Empfehlung).
 - **Frage-Embedding umgebaut.** War schon vor dem Branch korrekt: `doc_embed_text`
   embeddet bei FAQs nur die Frage, `doc_search_text` gibt Frage + Antwort an BM25. Die
   Frage-Antwort-Variante im Embedding wurde früher gemessen: 88 % → 82 %, also schlechter.
-- **`TOP_K_CANDIDATES`, `RRF_K`, `SIM_THRESHOLD`, `BM25_THRESHOLD`** verändert.
+- **`TOP_K_CANDIDATES`, `RRF_K`** verändert. (`SIM_THRESHOLD` / `BM25_THRESHOLD` wurden
+  in Commit 13 doch angefasst — gemessen, siehe oben.)
 - **Kategorie-Filterung** gebaut. Bräuchte einen Query-Classifier, der bei Fehlern das
   richtige Dokument aktiv wegfiltert — schlechter Tausch bei 91 % Hit-Rate.
 
@@ -152,11 +163,11 @@ Docker war die Empfehlung).
 |---|---|---|
 | `TUNING_MIN_HIT_RATE` | 0.85 | `eval/run_eval.py` |
 | `HOLDOUT_MIN_HIT_RATE` | 0.80 | `eval/run_eval.py` |
-| `MIN_ABSTENTION_RATE` | 0.0 | `eval/run_eval.py` |
+| `MIN_ABSTENTION_RATE` | 0.35 | `eval/run_eval.py` |
 | `MIN_FAITHFUL_RATE` | 0.90 | `eval/judge.py` |
 | `TOP_K_CANDIDATES` | 10 | `app/retrieval.py` |
 | `MAX_VARIANTS_PER_DOC` | 5 | `app/retrieval.py` |
-| `SIM_THRESHOLD` / `BM25_THRESHOLD` | 0.35 / 4.0 | `app/retrieval.py` |
+| `SIM_THRESHOLD` / `BM25_THRESHOLD` / `RERANK_THRESHOLD` | 0.40 / 5.5 / -6.0, **ODER**-verknüpft | `app/retrieval.py` |
 
 Die Hit-Rate-Schwellen sind bewusst ein Regressionsboden mit Puffer, keine Bestmarke —
 auf 90 % gezogen wird CI bei einer einzigen umformulierten Frage rot (33 bzw. 15 Fragen

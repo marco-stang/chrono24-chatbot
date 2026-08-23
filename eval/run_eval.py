@@ -15,20 +15,15 @@ OFFTOPIC_QUESTIONS_PATH = Path("eval/questions_offtopic.json")
 TUNING_MIN_HIT_RATE = 0.85
 HOLDOUT_MIN_HIT_RATE = 0.80
 # Anteil themenfremder Fragen, bei denen der Bot leer zurückgibt (siehe
-# app.retrieval.SIM_THRESHOLD / BM25_THRESHOLD). Gemessen auf
-# eval/questions_offtopic.json (14 Fragen, gemischt eindeutig off-topic und
-# absichtlich nah am Domänenvokabular): 0 % (0/14) — sogar eindeutig fachfremde
-# Fragen wie "Wie backe ich einen Hefezopf?" bekommen einen Treffer
-# (best_sim 0.742, weit über SIM_THRESHOLD 0.35). Ursache laut Diagnose:
-# SIM_THRESHOLD liegt unter der Rausch-Untergrenze des multilingualen
-# MiniLM-Modells für kurze Fragesätze — schon reine Fragesatz-Struktur
-# ("Wie … ich …?") erzeugt hohe Cosine-Similarity, unabhängig vom Thema.
-# 0 % ist damit der ehrliche gemessene Boden, kein Puffer möglich (kleiner
-# als 0 gibt es nicht) — die Schwelle bleibt bewusst bei 0, bis SIM_THRESHOLD
-# selbst neu kalibriert wird (außerhalb des Scopes dieses Fixes, siehe
-# README). Das Gate misst die Rate weiterhin bei jedem Lauf und macht die
-# Regression sichtbar, kann sie aber aktuell nicht verhindern.
-MIN_ABSTENTION_RATE = 0.0
+# app.retrieval: SIM_THRESHOLD / BM25_THRESHOLD / RERANK_THRESHOLD, ODER-
+# verknüpft). Gemessen auf eval/questions_offtopic.json (14 Fragen, gemischt
+# eindeutig off-topic und absichtlich nah am Domänenvokabular): 50 % (7/14)
+# bei 0 verlorenen on-topic-Treffern. Die 7 Durchrutscher sind die gewollt
+# domänennahen Fragen (Omega-Wert, eBay-Vergleich, Versicherung) -- kein
+# Retrieval-Signal trennt die vom Korpus, dort greifen LLM-Prompt und
+# Faithcheck. Vor der Umstellung auf ODER-Logik (2026-08-23) lag die Rate bei
+# 0 % (0/14). Schwelle mit Puffer für Einzelfrage-Rauschen (eine Frage = 7 %).
+MIN_ABSTENTION_RATE = 0.35
 
 
 def _questions_path(argv: list[str]) -> Path:
