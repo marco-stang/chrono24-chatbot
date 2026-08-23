@@ -161,8 +161,34 @@ mit den echten Zahlen inklusive der unvorteilhaften. `PRODUCT.md`-Evidenzliste s
 auf 11 Projekten statt veralteter 8.
 
 **In marco-os committet, aber nicht gepusht** — ein Push geht dort direkt live auf GitHub
-Pages, und die neuen Planeten sollten vorher einmal im Browser gesehen werden
-(`start-local.bat`, Cluster `agentic-ai` trägt jetzt sechs statt vier Knoten).
+Pages, und es gibt einen offenen Befund (siehe unten).
+
+**Offener Befund: das Portrait-Layout wird durch die zwei neuen Knoten enger.** Der
+Cluster `agentic-ai` trägt jetzt fünf Ring-Knoten statt drei, und `graph-layout.js` ist
+sichtbar auf die alten Zahlen getunt — der Kommentar an `CLUSTER_ANGLE_OFFSET_DEG` sagt
+wörtlich „agentic-ai has 4 members spaced 90deg apart". Gemessen (kleinster Abstand
+zwischen zwei Knoten, `computeLayout` direkt aufgerufen):
+
+| Viewport | vorher (9 Projekte) | nachher (11) |
+|---|---|---|
+| 1440×900 (Desktop) | 136 px | 134 px |
+| 390×844 (iPhone) | 58 px | 39 px |
+| 360×800 | — | 35 px |
+
+Desktop ist unverändert. Auf Portrait-Viewports schrumpft der Abstand auf 39 px bei
+34 px Planetendurchmesser — die Planeten selbst überlappen also knapp nicht, ihre Labels
+aber schon. Zwei naheliegende Auswege wurden durchgerechnet und helfen **nicht**:
+
+- **andere Cluster-Zuordnung**: jede getestete Variante ist schlechter (Chatbot nach
+  `full-stack`: 30 px; nach `cloud`: 30 px). Beide Projekte in `agentic-ai` ist bereits
+  das Optimum.
+- **nur die Portrait-Winkel neu tunen**: eine Rastersuche über alle drei
+  `CLUSTER_ANGLE_OFFSET_DEG_PORTRAIT`-Werte kommt auf höchstens 44 px.
+
+Ein echter Fix müsste an `CLUSTER_RX_MULTIPLIER_PORTRAIT` (1.25/1.65/2.0), also an die
+Ring-Radien. Das ist eine bewusst getunte Stelle des Designsystems mit ausführlichen
+Begründungen im Code — deshalb nicht im Vorbeigehen angefasst, sondern hier vorgelegt.
+Bis dahin ist marco-os nicht gepusht und nichts davon live.
 
 Sobald Repo und Deploy stehen: in beiden Einträgen `demoUrl`/`repoUrl` füllen und
 `status` auf `live` ziehen. Beim Chatbot zusätzlich die README-Zeile „**Demo-Link:** folgt
