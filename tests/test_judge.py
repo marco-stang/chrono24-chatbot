@@ -1,8 +1,10 @@
 from app.retrieval import RetrievedDoc
 from eval.judge import (
     JUDGE_SYSTEM,
+    MIN_FAITHFUL_RATE,
     aggregate,
     build_judge_prompt,
+    check_gate,
     judge_one,
     parse_verdict,
 )
@@ -169,3 +171,13 @@ async def test_judge_one_empty_retrieval_uses_refusal_answer_without_answer_fn_c
     assert calls == []
     assert result["answer"] == "Dazu finde ich nichts in den Chrono24-Hilfeseiten."
     assert result["verdict"]["answered"] == "verweigert"
+
+
+def test_check_gate_passes_at_minimum_faithful_rate():
+    assert check_gate({"faithful_rate": MIN_FAITHFUL_RATE, "n": 10, "answered_counts": {}}) == []
+
+
+def test_check_gate_fails_below_minimum_faithful_rate():
+    failures = check_gate({"faithful_rate": MIN_FAITHFUL_RATE - 0.01, "n": 10, "answered_counts": {}})
+    assert len(failures) == 1
+    assert "Faithful" in failures[0]

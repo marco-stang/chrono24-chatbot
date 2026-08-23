@@ -18,6 +18,10 @@ NOT_FOUND_ANSWER = "Dazu finde ich nichts in den Chrono24-Hilfeseiten."
 
 MAX_JUDGE_TOKENS = 300
 
+# Aktuell gemessen: 100 % (33/33, siehe README). Puffer fuer Einzelfrage-Rauschen
+# auf dem kleinen Sample, keine Verschaerfung ohne erneuten vollen Judge-Lauf.
+MIN_FAITHFUL_RATE = 0.90
+
 JUDGE_SYSTEM = (
     "Du bist ein strenger Prüfer für die Antworten eines RAG-Chatbots zu "
     "Chrono24-Hilfeseiten. Du bekommst eine Frage, den Kontext, den der Chatbot "
@@ -118,6 +122,16 @@ def aggregate(results: list[dict]) -> dict:
     return {"n": len(results), "faithful_rate": faithful_rate, "answered_counts": answered_counts}
 
 
+def check_gate(summary: dict) -> list[str]:
+    """Prüft die Faithful-Rate gegen die Mindestschwelle. Leer = Gate bestanden."""
+    failures = []
+    if summary["faithful_rate"] < MIN_FAITHFUL_RATE:
+        failures.append(
+            f"Faithful-Rate {summary['faithful_rate']:.0%} unter Minimum {MIN_FAITHFUL_RATE:.0%}"
+        )
+    return failures
+
+
 async def _run_all(questions: list[dict], retriever, client) -> list[dict]:
     results = []
     for item in questions:
@@ -154,6 +168,8 @@ def _print_report(results: list[dict], summary: dict) -> None:
 
 
 def main() -> None:
+    import sys
+
     from app.llm import get_client
     from app.retrieval import Retriever
 
@@ -170,6 +186,12 @@ def main() -> None:
         encoding="utf-8",
     )
     print(f"\nRohergebnisse geschrieben nach {RESULTS_PATH}")
+
+    if "--gate" in sys.argv:
+        failures = check_gate(summary)
+        for failure in failures:
+            print(f"GATE FAIL: {failure}")
+        sys.exit(1 if failures else 0)
 
 
 if __name__ == "__main__":
