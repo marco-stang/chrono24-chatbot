@@ -204,8 +204,8 @@ Sonnet 5 würden ihn ablehnen — relevant, falls das Modell je gewechselt wird)
 
 Das löst es **nicht vollständig**, und das ist der eigentliche Befund: zwei Läufe bei
 identischem Code und `temperature=0` ergeben weiter 91 % und 94 %. Gierige Dekodierung ist
-keine Determinismus-Garantie der API. Sechs Messungen insgesamt: 100 / 94 / 88 / 94 / 91 /
-94 %. Bei 33 Fragen sind drei Prozentpunkte genau eine Frage.
+keine Determinismus-Garantie der API. Sieben Messungen insgesamt: 100 / 94 / 88 / 94 / 91 /
+94 / 97 %. Bei 33 Fragen sind drei Prozentpunkte genau eine Frage.
 
 `MIN_FAITHFUL_RATE` deshalb von 0.90 auf **0.82** (27/33), zwei Fragen unter dem gemessenen
 Boden von 29/33 — dieselbe Puffer-Logik wie bei den Hit-Rate-Schwellen. Ein Gate bei 90 %

@@ -290,6 +290,7 @@ Abschnitts. Sechs Läufe über dieselben 33 Fragen:
 | 4 (23.08., lokal) | **temp 0** | temp 1.0 | 94 % |
 | 5 (23.08., lokal) | temp 0 | **temp 0** | 91 % |
 | 6 (23.08., lokal) | temp 0 | temp 0 | 94 % |
+| 7 (23.08., CI) | temp 0 | temp 0 | 97 % (32/33) |
 
 **Zwischen Lauf 2 und 3 lag kein einziger Commit an der Pipeline** — nur
 Markdown und eine CI-Datei. Die 6 Punkte Unterschied sind reines
@@ -298,10 +299,11 @@ Antwort, Judge) setzte `temperature`, liefen also auf dem API-Default 1.0
 — ein Messinstrument, das selbst würfelt.
 
 Alle drei stehen jetzt auf `temperature=0`. Das hilft, löst es aber nicht:
-Läufe 5 und 6 sind bei identischem Code und identischer Temperatur immer
-noch 91 % und 94 %. Temperatur 0 ist gierige Dekodierung, keine
+Läufe 5 bis 7 sind bei identischem Code und identischer Temperatur 91 %,
+94 % und 97 %. Temperatur 0 ist gierige Dekodierung, keine
 Determinismus-Garantie der API. Bei 33 Fragen entspricht eine einzige Frage
 3 Prozentpunkten — das Sample ist für eine Zahl mit zwei Stellen zu klein.
+Wer hier eine Bestmarke herausgreift, sucht sich seinen Lauf aus.
 
 Konsequenz: `MIN_FAITHFUL_RATE` steht bei **82 %** (27/33), zwei Fragen
 unter dem gemessenen Boden von 29/33. Eine Schwelle bei 90 % war auf diesem
@@ -311,7 +313,8 @@ schlimmer als gar kein Gate, weil man aufhört hinzusehen. Das Gate fängt
 damit einen echten Einbruch, nicht das Rauschen.
 
 Zur Einordnung der Verteilung (Lauf 6): voll 25, teilweise 5, verweigert 3,
-nein 0. Rohdaten des ersten Laufs in `eval/judge_results.json`.
+nein 0. Rohdaten des ersten Laufs in `eval/judge_results.json`, die
+späteren stehen in den CI-Logs des `quality-gate`-Jobs.
 
 Nicht jeder Treffer ist Rauschen. Aus Lauf 2 stammt ein echter inhaltlicher
 Fehler: Auf die Frage nach der französischen Meldepflicht dreht die
