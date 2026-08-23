@@ -9,7 +9,7 @@ from pathlib import Path
 import chromadb
 
 from app.config import settings
-from app.textproc import expand_query, tokenize
+from app.textproc import expand_query
 
 TOP_K_CANDIDATES = 10
 RRF_K = 60
@@ -36,6 +36,17 @@ def rrf_fuse(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
         for rank, doc_id in enumerate(ranking):
             scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
     return scores
+
+
+def _dedupe_ranking(ids: list[str]) -> list[str]:
+    """Erster (bester) Treffer pro kanonischer ID gewinnt -- Varianten-Duplikate raus."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for doc_id in ids:
+        if doc_id not in seen:
+            seen.add(doc_id)
+            result.append(doc_id)
+    return result
 
 
 def _default_encoder():
@@ -71,8 +82,16 @@ class Retriever:
 
     def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedDoc]:
         n = min(TOP_K_CANDIDATES, len(self.doc_ids))
-        res = self.collection.query(query_embeddings=[list(self.encoder(query))], n_results=n)
-        vector_ranking = res["ids"][0]
+        res = self.collection.query(
+            query_embeddings=[list(self.encoder(query))], n_results=n,
+            include=["metadatas", "distances"],
+        )
+        # Ältere Indexstände tragen keine Metadaten (Chroma liefert dann None).
+        # Dort ist die Dokument-ID selbst schon die kanonische.
+        vector_ranking = _dedupe_ranking([
+            (meta or {}).get("canonical_id", doc_id)
+            for meta, doc_id in zip(res["metadatas"][0], res["ids"][0])
+        ])
         best_sim = 1.0 - res["distances"][0][0] if res["distances"][0] else 0.0
 
         # Synonym-Expansion nur hier: BM25 braucht exakte Wortformen, die
