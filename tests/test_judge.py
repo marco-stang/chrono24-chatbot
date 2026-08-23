@@ -2,6 +2,7 @@ from app.retrieval import RetrievedDoc
 from eval.judge import (
     JUDGE_SYSTEM,
     MIN_FAITHFUL_RATE,
+    _print_report,
     aggregate,
     build_judge_prompt,
     check_gate,
@@ -201,3 +202,20 @@ async def test_judge_call_pins_temperature_to_zero():
     )
 
     assert judge_client.messages.calls[0]["temperature"] == 0
+
+
+def test_print_report_shows_confidence_interval_for_faithful_rate(capsys):
+    """Die Faithful-Rate schwankte ueber sieben Laeufe zwischen 85 % und 100 %,
+    bei unveraenderter Pipeline. Eine nackte Punktzahl im CI-Log laedt dazu ein,
+    genau diese Schwankung als Regression zu lesen -- das Intervall gehoert
+    daneben."""
+    results = [
+        {"question": f"F{i}", "answer": "A",
+         "verdict": {"faithful": i > 2, "answered": "voll", "begruendung": "-"}}
+        for i in range(33)
+    ]
+    _print_report(results, aggregate(results))
+
+    out = capsys.readouterr().out
+    assert "95%-KI" in out
+    assert "30/33" in out

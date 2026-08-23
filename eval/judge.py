@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.llm import build_context, rewrite_query, stream_answer
+from eval.stats import format_rate
 
 logger = logging.getLogger("chrono24-chatbot.judge")
 
@@ -129,7 +130,15 @@ def aggregate(results: list[dict]) -> dict:
         category = r["verdict"].get("answered", "unknown")
         answered_counts[category] = answered_counts.get(category, 0) + 1
 
-    return {"n": len(results), "faithful_rate": faithful_rate, "answered_counts": answered_counts}
+    return {
+        "n": len(results),
+        "faithful_rate": faithful_rate,
+        # Zaehler und Nenner separat, damit das Konfidenzintervall gerechnet
+        # werden kann statt aus der gerundeten Quote rueckgeschlossen zu werden.
+        "faithful_hits": sum(1 for v in faithful_values if v is True),
+        "faithful_total": len(faithful_values),
+        "answered_counts": answered_counts,
+    }
 
 
 def check_gate(summary: dict) -> list[str]:
@@ -161,7 +170,7 @@ async def _run_all(questions: list[dict], retriever, client) -> list[dict]:
 
 def _print_report(results: list[dict], summary: dict) -> None:
     print(f"\nLLM-as-Judge-Ergebnis ({summary['n']} Fragen)")
-    print(f"Faithful-Rate: {summary['faithful_rate']:.0%}")
+    print(f"Faithful-Rate: {format_rate(summary['faithful_hits'], summary['faithful_total'])}")
     print("Beantwortungsgrad:")
     for category, count in sorted(summary["answered_counts"].items()):
         print(f"  {category}: {count}")

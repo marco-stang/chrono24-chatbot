@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from eval.stats import format_rate
+
 QUESTIONS_PATH = Path("eval/questions.json")
 HOLDOUT_QUESTIONS_PATH = Path("eval/questions_holdout.json")
 OFFTOPIC_QUESTIONS_PATH = Path("eval/questions_offtopic.json")
@@ -131,9 +133,12 @@ if __name__ == "__main__":
         tuning_rate, _ = hit_rate_at_k(retriever, tuning)
         holdout_rate, _ = hit_rate_at_k(retriever, holdout)
         abstain_rate, false_hits = abstention_rate(retriever, offtopic)
-        print(f"Tuning-Hit-Rate@5: {tuning_rate:.0%}")
-        print(f"Holdout-Hit-Rate@5: {holdout_rate:.0%}")
-        print(f"Abstention-Rate: {abstain_rate:.0%}")
+        # Punktzahl plus 95-%-Intervall: bei 14 bis 33 Fragen sagt die Zahl
+        # allein zu wenig, und ohne die Spanne daneben wird ueber Unterschiede
+        # gestritten, die vollstaendig im Rauschen liegen.
+        print(f"Tuning-Hit-Rate@5:  {format_rate(round(tuning_rate * len(tuning)), len(tuning))}")
+        print(f"Holdout-Hit-Rate@5: {format_rate(round(holdout_rate * len(holdout)), len(holdout))}")
+        print(f"Abstention-Rate:    {format_rate(len(offtopic) - len(false_hits), len(offtopic))}")
         for false_hit in false_hits:
             print(f"  FALSE HIT: {false_hit['question']!r} -> "
                   f"{false_hit['got_id']} ({false_hit['got_title']!r})")
@@ -146,6 +151,6 @@ if __name__ == "__main__":
     if "--with-rewrite" in sys.argv:
         questions = _rewrite_questions(questions)
     rate, misses = hit_rate_at_k(retriever, questions)
-    print(f"Hit-Rate@5: {rate:.0%} ({len(questions) - len(misses)}/{len(questions)})")
+    print(f"Hit-Rate@5: {format_rate(len(questions) - len(misses), len(questions))}")
     for miss in misses:
         print(f"  MISS: {miss['question']!r} erwartet {miss['expected_doc_id']}, bekam {miss['got']}")

@@ -119,12 +119,14 @@ Eval-Fragen dienen — das wäre ein direkter Zirkelschluss.
    handgeschriebene Held-out-Set bleibt unverändert bestehen und behält seine eigene Zahl.
 3. **Bias-Differenz messen und ins README schreiben.** Hit-Rate auf handgeschrieben vs.
    generiert. Wenn die Differenz groß ist, ist das ein Befund, kein Makel.
-4. **Konfidenzintervalle in `eval/run_eval.py` mitdrucken**, nicht nur die Punktzahl.
-   Wilson-Formel, ~10 Zeilen. Damit steht in jedem CI-Lauf, was die Zahl aushält. Das
-   ist der billigste Teil und vermutlich der wertvollste.
+4. ~~**Konfidenzintervalle mitdrucken**~~ — **erledigt.** `eval/stats.py` mit
+   `wilson_interval()` und `format_rate()`, eingebunden in `eval/run_eval.py` (alle drei
+   Raten) und `eval/judge.py` (Faithful-Rate). Ab 20 Punkten Intervallbreite hängt die
+   Ausgabe selbst einen Warnhinweis an; aktuell trifft das **alle drei** Zahlen. 8 Tests.
 5. Erst danach die CI-Schwellen nachziehen.
 
-Schritt 4 lohnt sich unabhängig von allem anderen und ist in einer halben Stunde erledigt.
+Nach Schritt 1–3 sollte die Warnung bei Off-Topic und Held-out verschwinden — das ist
+das messbare Abnahmekriterium für diese Aufgabe.
 
 ---
 

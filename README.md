@@ -333,8 +333,23 @@ Was das kosten würde zu beheben — bei gleicher Trefferquote von 91 %:
 | 100 | [84 %, 95 %] | 11 pp |
 | 150 | [85 %, 94 %] | 9 pp |
 
+Damit das nicht im Kleingedruckten verschwindet, druckt jeder Eval-Lauf das
+Intervall mit — und markiert selbst, wenn die eigene Zahl zu dünn belegt ist
+(`eval/stats.py`, Schwelle 20 Punkte Breite):
+
+```text
+Tuning-Hit-Rate@5:  91% (30/33, 95%-KI [76%, 97%])  <- Stichprobe zu klein: 20% Punkte breit
+Holdout-Hit-Rate@5: 100% (15/15, 95%-KI [80%, 100%])  <- Stichprobe zu klein: 20% Punkte breit
+Abstention-Rate:    50% (7/14, 95%-KI [27%, 73%])  <- Stichprobe zu klein: 46% Punkte breit
+```
+
+Alle drei Zahlen dieses Projekts stehen aktuell unter dieser Warnung. Das ist
+gewollt sichtbar: eine Kennzahl, die ihre eigene Unsicherheit verschweigt, ist
+in einem Projekt über Belegbarkeit die falsche Kennzahl.
+
 Der ehrlichste offene Punkt dieses Projekts ist damit nicht die Hit-Rate,
-sondern die Stichprobengröße.
+sondern die Stichprobengröße — Plan dafür in
+`HANDOVER-eval-set-groesse.md`.
 
 ### Konfidenz-Gate für themenfremde Fragen
 
