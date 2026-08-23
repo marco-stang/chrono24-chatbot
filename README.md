@@ -116,6 +116,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | neutral: `audience`-Feld als harter Pre-Filter, echter Ausschluss vor der RRF-Fusion | 91 % / 100 % — **exakt unverändert, beide Rollen-Misses bleiben Misses**, siehe unten |
 | Engine-Wechsel: Chroma + Hand-BM25 (`rank_bm25`) → SQLite (`sqlite-vec` + FTS5), siehe unten | 91 % / 100 % (**exakt dieselben drei Misses**), Abstention 50 % → 57 % (8/14) |
 | Reranker-Finetune auf Käufer/Verkäufer-Hard-Negatives (1016 Beispiele, 2 Epochen), siehe unten | 91 % / 100 % — **dieselben drei Misses**, Abstention 57 % → 100 % (14/14) |
+| LLM als Reranker (Haiku, unabhängige Scores) + Kandidaten-Union-Fix, siehe unten | Rollen-Misses gelöst, **neuer Miss** (DAC7) |
+| LLM als Reranker (Haiku, Rangfolge) + Kandidaten-Union-Fix, siehe unten | **100 % / 100 % — alle drei Dauer-Misses gelöst**, Abstention 100 % → 36 % (Architektur-Problem, kein Bugfix mehr — siehe `HANDOVER-llm-reranker.md`) |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -450,6 +452,66 @@ Wegfall der Prämisse: `data/index/` ist seit diesem Wechsel nicht mehr
 versioniert (siehe `.gitignore`), sondern wird bei Bedarf lokal bzw. im
 Docker-Build und in CI neu erzeugt (`python -m pipeline.index`, kostenlos —
 das Embedding-Modell läuft lokal).
+
+#### LLM als Reranker: Intention statt Nomen
+
+Alle bisherigen Reranker sind Embedding-artige Modelle — sie messen
+Wortverteilung, nicht ob ein Dokument eine Frage beantwortet (siehe „Warum
+der Vektorpfad hier versagt" oben). Ein LLM (`claude-haiku-4-5`, wie an
+anderer Stelle im Projekt schon für Query-Rewrite und Judge genutzt) liest
+statt zu embedden — echter Test, ob das den Unterschied macht.
+
+**Voraussetzung war der Kandidaten-Fix:** der bestehende RRF-Top-n-Cut
+schneidet faq-0098 und info-escrow-0007 schon *vor* jedem Reranking raus
+(BM25-Rang 8 bzw. 6, Vektor-Rang 207 bzw. 426 — verifiziert). Ohne die
+Kandidatenmenge auf die Vereinigung beider Top-10-Listen zu erweitern (statt
+des RRF-Fusions-Cutoffs), sieht kein Reranker — auch kein LLM — diese
+Dokumente je. Mit dem Fix: **beide Rollen-Misses lösen sich, LLM-Score 9–10,
+Platz 1.** Der erste Ansatz in der gesamten Ablationsreihe, der die
+Rollenverwechslung tatsächlich knackt.
+
+Erste Version (unabhängige 0–10-Scores pro Kandidat) hatte einen neuen
+Nebeneffekt: bei Themenclustern mit mehreren ähnlich passenden
+Geschwister-FAQs vergibt das Modell gehäuft Höchst-Scores (4-facher
+Gleichstand bei 10 auf die DAC7-Frage) und verliert dabei die eigentlich
+allgemeine, korrekte Antwort (faq-0162) gegen spezifischere Geschwister —
+derselbe Fehlermodus wie beim Certified-Miss (faq-0033 vs. faq-0048), nur
+neu ausgelöst durch den größeren Kandidatenpool. Umgestellt auf **explizite
+Rangfolge statt unabhängiger Scores** (JSON-Array der Dokumentnummern,
+absteigend nach Relevanz) — erzwingt Tiebreaks strukturell:
+
+| Ansatz | Rollen-Misses | DAC7 (faq-0162) | Certified (faq-0033) |
+|---|---|---|---|
+| Cross-Encoder (Basis/Finetune) | 0/2 gelöst | war nie Miss | Miss |
+| LLM, unabhängige Scores | 2/2 gelöst | **neuer Miss** | Miss |
+| LLM, Rangfolge | 2/2 gelöst | gelöst | **Platz 5/15 — Hit@5** |
+
+Mit Rangfolge: **Tuning-Hit-Rate@5 100 % (33/33)** — alle drei über die
+gesamte Ablationsreihe persistenten Misses gelöst, Holdout unverändert
+100 % (15/15). Ein Robustheitsproblem musste dafür noch behoben werden:
+Haiku lieferte anfangs oft nur Teil-Rangfolgen (z. B. 2 von 16 Indizes)
+trotz expliziter Anweisung „jede Nummer genau einmal" — behoben durch
+Nennung der exakten Kandidatenzahl im Prompt plus Beispiel-Array plus
+`max_tokens` 200 → 400.
+
+**Der Preis, unglättbar ohne Architekturänderung:** Rangfolge ist ein
+relatives Signal, keine absolute Konfidenz. Der beste von zehn komplett
+themenfremden Kandidaten bekommt denselben hohen Rang-Score wie ein echter
+Treffer — das bestehende `RERANK_THRESHOLD`-Gate (setzt „hoher Score = sicher
+relevant" voraus) verliert damit seine Bedeutung. Gemessen:
+**Abstention-Rate 100 % → 36 % (5/14)**, schlechter als der Ausgangswert vor
+jedem Reranker-Experiment (50 %). Sortier-Signal und Konfidenz-Signal sind
+zwei verschiedene Dinge — ein Prompt, der beides liefert (Rangfolge fürs
+Sortieren, separate absolute Ja/Nein- oder 0–10-Einschätzung fürs
+Abstention-Gate), ist der naheliegende nächste Schritt, aber ein neuer
+Umbau, kein Bugfix mehr. Nicht mehr umgesetzt in dieser Sitzung — siehe
+`HANDOVER-llm-reranker.md`.
+
+Weiterer offener Kostenpunkt: ein LLM-Call pro Anfrage mit Kandidaten
+(Ø 1,1–1,3 s Latenz zusätzlich, echte Haiku-API-Kosten laufend statt
+einmaliger Trainingsaufwand wie beim Finetune) — anders als der bisherige
+Rewrite-Call, der bei deutschen Fragen ohne Verlauf ganz entfällt, würde
+dieser Call bei praktisch jeder On-Topic-Anfrage laufen.
 
 ### Held-out-Validierung
 
