@@ -1,6 +1,6 @@
 # Handover: Query-Varianten + CI Eval Gate
 
-**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 13 Commits, **nicht gemerged**, nicht gepusht
+**Stand:** 2026-08-23 (Nachmittag) · Branch `feat/query-varianten-eval-gate`, 15 Commits, **nicht gemerged**, nicht gepusht
 **Basis:** `main` bei `48da6e9` · 149 Tests grün · ruff sauber · Working Tree clean
 
 Plan: `docs/superpowers/plans/2026-08-23-query-varianten-eval-gate.md`
