@@ -5,6 +5,13 @@ import json
 from pathlib import Path
 
 QUESTIONS_PATH = Path("eval/questions.json")
+HOLDOUT_QUESTIONS_PATH = Path("eval/questions_holdout.json")
+
+# Aktuell gemessen: Tuning 91 % (30/33), Holdout 87 % (13/15) — Schwellen bewusst
+# mit Puffer für Einzelfrage-Rauschen (33/15 Fragen sind ein kleines Sample) und
+# nach jeder bewussten Verbesserung hier nachziehen, nicht nur nach oben schieben.
+TUNING_MIN_HIT_RATE = 0.85
+HOLDOUT_MIN_HIT_RATE = 0.80
 
 
 def _questions_path(argv: list[str]) -> Path:
@@ -48,16 +55,43 @@ def _rewrite_questions(questions: list[dict]) -> list[dict]:
     return asyncio.run(rewrite_all())
 
 
+def check_gate(tuning_rate: float, holdout_rate: float) -> list[str]:
+    """Prüft beide Hit-Raten gegen ihre Mindestschwelle. Leer = Gate bestanden."""
+    failures = []
+    if tuning_rate < TUNING_MIN_HIT_RATE:
+        failures.append(
+            f"Tuning-Hit-Rate {tuning_rate:.0%} unter Minimum {TUNING_MIN_HIT_RATE:.0%}"
+        )
+    if holdout_rate < HOLDOUT_MIN_HIT_RATE:
+        failures.append(
+            f"Holdout-Hit-Rate {holdout_rate:.0%} unter Minimum {HOLDOUT_MIN_HIT_RATE:.0%}"
+        )
+    return failures
+
+
 if __name__ == "__main__":
     import sys
 
     from app.config import settings
     from app.retrieval import Retriever
 
+    retriever = Retriever(settings.index_dir, settings.corpus_path)
+
+    if "--gate" in sys.argv:
+        tuning = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+        holdout = json.loads(HOLDOUT_QUESTIONS_PATH.read_text(encoding="utf-8"))
+        tuning_rate, _ = hit_rate_at_k(retriever, tuning)
+        holdout_rate, _ = hit_rate_at_k(retriever, holdout)
+        print(f"Tuning-Hit-Rate@5: {tuning_rate:.0%}")
+        print(f"Holdout-Hit-Rate@5: {holdout_rate:.0%}")
+        failures = check_gate(tuning_rate, holdout_rate)
+        for failure in failures:
+            print(f"GATE FAIL: {failure}")
+        sys.exit(1 if failures else 0)
+
     questions = json.loads(_questions_path(sys.argv).read_text(encoding="utf-8"))
     if "--with-rewrite" in sys.argv:
         questions = _rewrite_questions(questions)
-    retriever = Retriever(settings.index_dir, settings.corpus_path)
     rate, misses = hit_rate_at_k(retriever, questions)
     print(f"Hit-Rate@5: {rate:.0%} ({len(questions) - len(misses)}/{len(questions)})")
     for miss in misses:
