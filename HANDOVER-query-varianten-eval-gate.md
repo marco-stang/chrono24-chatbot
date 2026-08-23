@@ -302,6 +302,21 @@ Was bliebe, ist **Domänen-Finetuning** auf Chrono24-Frage/Antwort-Paaren — be
 Aufwand erst mit echtem Traffic. Bis dahin ist 91 % / 100 % das Optimum unter allem
 Gemessenen, und die Grenze ist sauber benannt statt weggeredet.
 
+### 9. Der eigentliche offene Punkt: die Stichprobe
+
+Nach zwölf gemessenen und verworfenen Optimierungsversuchen ist die belastbarere
+Erkenntnis nicht, dass 91 % das Optimum sind — sondern dass die Stichprobe diese Zahl gar
+nicht trägt. 95-%-Wilson-Intervalle: Tuning 91 % ist **[76 %, 97 %]**, Held-out 100 % ist
+**[80 %, 100 %]**, die Abstention-Rate 50 % ist **[27 %, 73 %]**. Bei 33 Fragen braucht es
+rund vier Fragen Unterschied, um überhaupt aus dem Rauschen zu kommen — ein Teil der
+„neutral"-Einträge in der Ablationstabelle könnten echte kleine Effekte sein, die dieses
+Set nicht auflöst.
+
+Eigenes Handover dafür: **`HANDOVER-eval-set-groesse.md`** — mit dem methodischen
+Fallstrick (LLM-generierte Eval-Fragen aus den eigenen Dokumenten sind systematisch zu
+leicht, weil sie den Wortlaut übernehmen und genau darauf dieses Embedding reagiert) und
+den Regeln, die das entschärfen.
+
 ## Bewusst nicht gemacht
 
 - **Chunking angefasst.** Die längste FAQ-Antwort im Korpus hat **226 Wörter** (Median 47,
