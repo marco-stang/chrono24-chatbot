@@ -150,3 +150,46 @@ def test_build_index_without_variants_path_behaves_as_before(tmp_path):
     import chromadb
     coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
     assert coll.count() == 2
+
+
+def test_build_index_bm25_remains_variant_free(tmp_path):
+    """BM25-Index darf nie Varianten enthalten — nur kanonische Dokumente."""
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "variants.json"
+    variants_path.write_text(json.dumps({"faq-0001": ["Wie läuft der Käuferschutz ab?"]}),
+                             encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    build_index(corpus_path, index_dir, encoder=fake_encoder, variants_path=variants_path)
+
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    # Chroma sollte 3 Einträge haben (2 Canonical + 1 Variante)
+    assert coll.count() == 3
+    # BM25 sollte nur 2 kanonische Dokumente haben
+    with open(index_dir / "bm25.pkl", "rb") as f:
+        data = pickle.load(f)
+    assert data["doc_ids"] == ["faq-0001", "info-buyer-protection-0001"]
+
+
+def test_build_index_missing_variants_file_builds_normally_and_warns(tmp_path, capsys):
+    """Fehlende Varianten-Datei führt zu Warnung, Index wird trotzdem gebaut."""
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "nonexistent.json"
+    index_dir = tmp_path / "index"
+
+    build_index(corpus_path, index_dir, encoder=fake_encoder, variants_path=variants_path)
+
+    # Index sollte normal mit 2 kanonischen Dokumenten gebaut werden
+    import chromadb
+    coll = chromadb.PersistentClient(path=str(index_dir / "chroma")).get_collection("docs")
+    assert coll.count() == 2
+
+    # Die Warnung sollte gedruckt worden sein
+    captured = capsys.readouterr()
+    assert "Varianten-Datei nicht vorhanden" in captured.out
+    assert str(variants_path) in captured.out

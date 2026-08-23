@@ -84,23 +84,25 @@ def _variant_entries(
     Embedding-Pfad (siehe Architektur-Begründung in variants.py).
     """
     if not variants_path.exists():
+        print(f"Varianten-Datei nicht vorhanden: {variants_path} (Index ohne Varianten)")
         return [], [], []
     variants: dict[str, list[str]] = json.loads(variants_path.read_text(encoding="utf-8"))
     faq_ids = {d["id"] for d in docs if d["type"] == "faq"}
 
     ids: list[str] = []
     texts: list[str] = []
+    metadatas: list[dict] = []
     for faq_id, questions in variants.items():
         if faq_id not in faq_ids:
-            continue  # Variante zu einem Dedupe-entfernten oder entfallenen FAQ.
+            continue  # Variante zu entfallenem FAQ (nicht in aktuellem Corpus).
         for i, question in enumerate(questions, 1):
             ids.append(f"{faq_id}#v{i}")
             texts.append(question)
+            metadatas.append({"canonical_id": faq_id})
 
     if not ids:
         return [], [], []
     embeddings = encoder(texts)
-    metadatas = [{"canonical_id": vid.split("#v")[0]} for vid in ids]
     return ids, embeddings, metadatas
 
 
