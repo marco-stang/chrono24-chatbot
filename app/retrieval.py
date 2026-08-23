@@ -17,6 +17,12 @@ RRF_K = 60
 # themenfremd und es gibt keinen LLM-Call. Nach Task 10 (Eval) nachjustieren.
 SIM_THRESHOLD = 0.35
 BM25_THRESHOLD = 4.0
+# Varianten teilen sich sonst die n Rohplätze: bei bis zu MAX_VARIANTS_PER_DOC
+# Umformulierungen je FAQ kollabieren sie nach der canonical_id-Dedupe wieder
+# auf einen Kandidaten. Deshalb überfetchen und erst nach der Dedupe kappen —
+# der Vektorpfad liefert damit wieder n *verschiedene* Dokumente wie vor den
+# Varianten.
+MAX_VARIANTS_PER_DOC = 5
 
 
 @dataclass
@@ -82,8 +88,14 @@ class Retriever:
 
     def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedDoc]:
         n = min(TOP_K_CANDIDATES, len(self.doc_ids))
+        # Überfetchen: die Collection enthält jetzt auch Varianten-Einträge,
+        # von denen bis zu MAX_VARIANTS_PER_DOC pro FAQ auf denselben
+        # canonical_id-Kandidaten zurückfallen. Erst nach der Dedupe unten
+        # auf n kappen, sonst verdrängen sich Varianten derselben FAQ
+        # gegenseitig aus den n Rohplätzen.
+        fetch_n = min(n * (1 + MAX_VARIANTS_PER_DOC), self.collection.count())
         res = self.collection.query(
-            query_embeddings=[list(self.encoder(query))], n_results=n,
+            query_embeddings=[list(self.encoder(query))], n_results=fetch_n,
             include=["metadatas", "distances"],
         )
         # Ältere Indexstände tragen keine Metadaten (Chroma liefert dann None).
@@ -91,7 +103,7 @@ class Retriever:
         vector_ranking = _dedupe_ranking([
             (meta or {}).get("canonical_id", doc_id)
             for meta, doc_id in zip(res["metadatas"][0], res["ids"][0])
-        ])
+        ])[:n]
         best_sim = 1.0 - res["distances"][0][0] if res["distances"][0] else 0.0
 
         # Synonym-Expansion nur hier: BM25 braucht exakte Wortformen, die

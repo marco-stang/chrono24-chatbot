@@ -14,8 +14,8 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 
 - **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
   Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte Query-Varianten
-  je FAQ (gemessen neutral) — 91 % Hit-Rate@5,
-  held-out validiert (87 %)
+  je FAQ — 91 % Hit-Rate@5,
+  held-out validiert (93 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot ehrlich „weiß ich nicht"
 - **Laufzeit-Faithfulness-Check:** jeder Antwortsatz wird deterministisch
@@ -132,19 +132,31 @@ Query-Varianten (`pipeline/variants.py`) generieren pro FAQ per Haiku 3–5
 Umformulierungen und embedden sie zusätzlich zur Originalfrage, verknüpft
 über ein `canonical_id`-Metadatum in Chroma. Ziel: Nutzerformulierungen, die
 weiter von der FAQ-Frage abweichen, als es die multilingualen Embeddings
-allein auffangen. Gemessen: Tuning 91 % (30/33), Holdout 87 % (13/15) —
-beide exakt auf dem Stand vor dem Experiment, kein einziger Fall kippt in
-irgendeine Richtung. Ehrlich: auf den vorhandenen Testsets bringt das
-Experiment keinen messbaren Gewinn, weder positiv noch negativ. Ein
-plausibler Grund liegt im Retrieval-Code selbst: `Retriever.retrieve`
-begrenzt die Chroma-Anfrage weiterhin auf `TOP_K_CANDIDATES = 10` Treffer,
-jetzt aber aus einer deutlich größeren Collection (Original- plus bis zu
-5 Varianten-Einträge pro FAQ). Mehrere Varianten derselben Frage können
-sich mehrere dieser 10 Plätze teilen und kollabieren nach der
-canonical_id-Dedupe wieder auf denselben Kandidaten — es kommen dadurch
-nicht automatisch mehr *unterschiedliche* Dokumente in die engere Auswahl.
-`TOP_K_CANDIDATES` wurde bewusst nicht angehoben, um dieser Messung nicht
-nachträglich auf die Sprünge zu helfen.
+allein auffangen.
+
+Die erste Messung (Tuning 91 %, Holdout 87 % — beide exakt auf dem Stand vor
+dem Experiment) hatte einen Bug als Ursache, keinen echten Nulleffekt:
+`Retriever.retrieve` begrenzte die Chroma-Anfrage auf `TOP_K_CANDIDATES = 10`
+Treffer — aus der jetzt viel größeren Collection (Original- plus bis zu 5
+Varianten-Einträge pro FAQ) —, und zwar *bevor* die Varianten per
+canonical_id auf ihr Original zurückgemappt wurden. Mehrere Varianten
+derselben Frage konnten sich so mehrere der 10 Rohplätze teilen und
+kollabierten danach auf denselben Kandidaten: der Vektorpfad lieferte damit
+oft nur noch 2–4 statt 10 unterschiedliche Dokumente an die RRF-Fusion — ein
+stiller Rückschritt gegenüber dem Stand vor den Varianten, der den
+vermeintlichen Nulleffekt der Varianten erst erzeugt hat (Gewinn durch mehr
+Kandidaten und Verlust durch die Verdrängung hoben sich gegenseitig auf).
+
+Der Fix überfetcht jetzt (`n * (1 + MAX_VARIANTS_PER_DOC)`, gedeckelt auf
+die Collection-Größe) und dedupliziert *vor* dem Kappen auf `n` — der
+Vektorpfad liefert damit wieder n verschiedene Dokumente wie vor den
+Varianten. `TOP_K_CANDIDATES` selbst blieb unverändert, um die Messung
+nicht nachträglich zu tunen. Nachgemessen: Tuning unverändert **91 %
+(30/33)**, Holdout jetzt **93 % (14/15)** — ein Fall mehr als vorher
+(87 %, 13/15) und mehr als die Tuning-Zahl. Ehrlich: ein einzelner
+zusätzlicher Treffer auf 15 Fragen ist ein kleines Sample und kein Beweis
+für einen großen Effekt, aber es ist der erste tatsächlich positive Befund
+der Varianten — vorher hat der Bug jeden echten Gewinn verdeckt.
 
 Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
 Retrieval findet jeweils die richtige Themenfamilie, aber das falsche
@@ -161,11 +173,45 @@ zu optimieren, ist real. Als Gegenprobe gibt es `eval/questions_holdout.json`:
 15 neue, nie fürs Tuning verwendete Fragen zu Dokumenten, die im
 Tuning-Set nicht als Ziel vorkommen (11 FAQ-, 4 Seiten-Chunk-Ziele, 2
 englisch), einmalig gegen die finale Konfiguration gemessen:
-**87 % (13/15)**. Das liegt nahe an der Tuning-Zahl (91 %) — kein
-Anzeichen für schweres Eval-Set-Overfitting, weil ein System, das nur auf
-die 33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich stärker
-einbrechen würde. Die später ergänzte Synonym-Expansion wurde auf dem
-Held-out gegengeprüft: exakt gleiche Treffer (13/15), kein Fall kippt.
+**93 % (14/15)**. Das liegt sogar leicht über der Tuning-Zahl (91 %) —
+kein Anzeichen für schweres Eval-Set-Overfitting, weil ein System, das nur
+auf die 33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich
+stärker einbrechen würde. Die später ergänzte Synonym-Expansion wurde
+damals auf dem Held-out gegengeprüft: exakt gleiche Treffer (13/15), kein
+Fall kippt — die aktuelle Zahl (14/15) stammt aus dem Überfetch-Fix des
+Vektorpfads für Query-Varianten, siehe oben.
+
+### Konfidenz-Gate für themenfremde Fragen
+
+Hit-Rate misst Recall, nicht Abstention — ob der Bot bei Fragen ohne
+Chrono24-Bezug ehrlich leer zurückgibt statt zu halluzinieren, ist oben
+eine eigene Behauptung (der Bot sagt ehrlich „weiß ich nicht"). Dafür gibt
+es jetzt `eval/questions_offtopic.json` (14 Fragen,
+gemischt eindeutig themenfremd und absichtlich nah am Domänenvokabular —
+Wertschätzung einer konkreten Uhr, Konkurrenzvergleich, Kapitalanlage) und
+`abstention_rate()` in `eval/run_eval.py`, das den Anteil korrekt leerer
+Antworten misst.
+
+Gemessen: **0 % (0/14)** — auch eindeutig fachfremde Fragen wie „Wie backe
+ich einen Hefezopf?" bekommen einen Treffer (`best_sim` 0.742, weit über
+`SIM_THRESHOLD` 0.35). Diagnose: `SIM_THRESHOLD` liegt unter der
+Rausch-Untergrenze des multilingualen MiniLM-Embeddings für kurze
+Fragesätze — schon reine Fragesatz-Struktur („Wie … ich …?") erzeugt hohe
+Cosine-Similarity, unabhängig vom Thema (`faq-0154`, „Wie stelle ich meine
+Inserate ein?", matcht sowohl „Hefezopf" als auch „Fahrrad polieren").
+Dazu kommt der in [Query-Varianten](#warum-hybrid-rag) beschriebene Effekt:
+`best_sim` ist ein Maximum über eine Collection, die die Query-Varianten
+strikt vergrößert haben, also für jede Frage höchstens noch steigen kann.
+
+Ehrlich: das Konfidenz-Gate funktioniert auf dieser Stichprobe aktuell
+nicht. `MIN_ABSTENTION_RATE` steht deshalb bei 0 % — ein kleinerer Puffer
+war nicht möglich, weil 0 % bereits der gemessene Boden ist. Der Eval-Gate
+misst die Rate ab sofort bei jedem Lauf und macht eine weitere
+Verschlechterung sichtbar, verhindert aber keine, solange die Schwelle bei
+0 % liegt. `SIM_THRESHOLD` / `BM25_THRESHOLD` selbst wurden hier bewusst
+nicht angefasst — das ist eine Neukalibrierung, die der:die Projekt-Owner
+mit dieser Messung in der Hand bewusst treffen sollte, nicht ein Nebeneffekt
+dieses Fixes.
 
 ### Antwortqualität (LLM-as-Judge)
 
@@ -338,10 +384,14 @@ python -m eval.run_eval
 Zwei automatisierte Qualitäts-Regressionstests in `.github/workflows/ci.yml`,
 zusätzlich zu ruff/pytest/Docker-Build:
 
-- **`eval-gate`** (jeder Push und PR, keine API-Kosten): lädt den committeten
-  Index und prüft Hit-Rate@5 gegen Tuning- und Holdout-Fragen. Unter der
-  Mindestschwelle (`eval/run_eval.py::TUNING_MIN_HIT_RATE` /
-  `HOLDOUT_MIN_HIT_RATE`) schlägt der Job fehl.
+- **`eval-gate`** (jeder PR und jeder Push auf main, keine API-Kosten): lädt
+  den committeten Index und prüft Hit-Rate@5 gegen Tuning- und
+  Holdout-Fragen sowie die Abstention-Rate gegen themenfremde Fragen
+  (`eval/questions_offtopic.json`). Unter der jeweiligen Mindestschwelle
+  (`eval/run_eval.py::TUNING_MIN_HIT_RATE` / `HOLDOUT_MIN_HIT_RATE` /
+  `MIN_ABSTENTION_RATE`) schlägt der Job fehl. `MIN_ABSTENTION_RATE` steht
+  aktuell bei 0 % — siehe [Konfidenz-Gate für themenfremde Fragen](#konfidenz-gate-für-themenfremde-fragen)
+  für die ehrliche Begründung.
 - **`quality-gate`** (nur bei Push auf main, kostet Haiku-API-Calls): lässt
   `eval/judge.py --gate` über alle Tuning-Fragen laufen und prüft die
   Faithful-Rate gegen `eval/judge.py::MIN_FAITHFUL_RATE`. Braucht das

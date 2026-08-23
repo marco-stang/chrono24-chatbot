@@ -35,6 +35,8 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ hashFiles('app/config.py') }}
+          restore-keys: |
+            hf-models-
       - run: pip install -r requirements-dev.txt
       - run: python -m eval.run_eval --gate
 
@@ -51,6 +53,8 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ hashFiles('app/config.py') }}
+          restore-keys: |
+            hf-models-
       - run: pip install -r requirements-dev.txt
       - run: python -m eval.judge --gate
         env:

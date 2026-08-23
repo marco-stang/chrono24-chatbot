@@ -1,6 +1,8 @@
 import json
 import pickle
 
+import pytest
+
 from pipeline.index import build_index, dedupe_docs, doc_embed_text, doc_search_text
 
 FAQ = {"id": "faq-0001", "type": "faq", "question": "Wie funktioniert der Käuferschutz?",
@@ -172,6 +174,23 @@ def test_build_index_bm25_remains_variant_free(tmp_path):
     with open(index_dir / "bm25.pkl", "rb") as f:
         data = pickle.load(f)
     assert data["doc_ids"] == ["faq-0001", "info-buyer-protection-0001"]
+
+
+def test_build_index_rejects_non_list_variant_entry(tmp_path):
+    """Ein Bare-String statt einer Liste würde enumerate() über einzelne
+    Zeichen iterieren lassen und den Index unbemerkt mit einem Eintrag pro
+    Buchstaben vergiften. Statt eines Silent-Skips muss der Build laut
+    scheitern."""
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": [FAQ, CHUNK]}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "variants.json"
+    variants_path.write_text(json.dumps({"faq-0001": "Wie läuft der Käuferschutz ab?"}),
+                             encoding="utf-8")
+    index_dir = tmp_path / "index"
+
+    with pytest.raises(ValueError, match="faq-0001"):
+        build_index(corpus_path, index_dir, encoder=fake_encoder, variants_path=variants_path)
 
 
 def test_build_index_missing_variants_file_builds_normally_and_warns(tmp_path, capsys):

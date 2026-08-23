@@ -194,3 +194,57 @@ def test_retrieve_falls_back_to_doc_id_when_metadata_missing(tmp_path):
     docs_out = retriever.retrieve("Wie funktioniert der Käuferschutz?", top_k=5)
     assert docs_out
     assert docs_out[0].id == "faq-0001"
+
+
+def test_vector_path_yields_n_distinct_canonical_docs_after_dedupe(tmp_path):
+    """Pinnt die Ueberfetch-Invariante: der Vektorpfad muss n *verschiedene*
+    kanonische Dokumente liefern, auch wenn mehrere Varianten derselben FAQ
+    die naechsten Nachbarn der Query sind. Vor dem Fix (n_results=n VOR der
+    canonical_id-Dedupe) kollabiert das hier auf 1 Dokument, weil die 6
+    Eintraege (1 Original + 5 Varianten) von FAQ 0 die kompletten n=5
+    Rohplaetze fuer sich beanspruchen -- FAQ 1..4 kommen gar nicht erst zum
+    Zug."""
+    num_faqs = 5
+    variants_per_faq = 5
+    docs = [
+        {"id": f"faq-100{c}", "type": "faq", "question": f"FAQ Frage {c}",
+         "answer": f"Antwort {c}.", "category": "Kaufen",
+         "url": "https://www.chrono24.de/info/faqs.htm"}
+        for c in range(num_faqs)
+    ]
+    variants = {
+        f"faq-100{c}": [f"FAQ Variante {c}-{v}" for v in range(1, variants_per_faq + 1)]
+        for c in range(num_faqs)
+    }
+
+    # Jede FAQ bildet ein eng zusammenliegendes Cluster (Cosine-Similarity
+    # 0.995-1.0 fuer FAQ 0, 0.895-0.9 fuer FAQ 1, ...), die Cluster selbst
+    # liegen mit 0.1 Abstand klar getrennt -- keine Ties, deterministische
+    # Rohreihenfolge.
+    vecmap: dict[str, tuple[float, float]] = {}
+    for c in range(num_faqs):
+        for v in range(variants_per_faq + 1):
+            s = 1.0 - c * 0.1 - v * 0.001
+            text = f"FAQ Frage {c}" if v == 0 else f"FAQ Variante {c}-{v}"
+            vecmap[text] = (s, (1 - s ** 2) ** 0.5)
+    query_vec = (1.0, 0.0)
+
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": docs}),
+                           encoding="utf-8")
+    variants_path = tmp_path / "variants.json"
+    variants_path.write_text(json.dumps(variants), encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir,
+                encoder=lambda texts: [list(vecmap[t]) for t in texts],
+                variants_path=variants_path)
+
+    retriever = Retriever(index_dir, corpus_path,
+                          encoder=lambda text: list(vecmap.get(text, query_vec)),
+                          reranker=False)
+
+    # Fragetext kommt in keinem FAQ-Text vor -> BM25 traegt nichts bei, die
+    # Rueckgabe-Reihenfolge stammt damit ausschliesslich aus dem Vektorpfad.
+    docs_out = retriever.retrieve("Xylophon Quietscheentchen Zauberstab", top_k=num_faqs)
+    ids = [d.id for d in docs_out]
+    assert len(set(ids)) == num_faqs

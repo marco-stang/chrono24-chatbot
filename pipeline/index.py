@@ -95,6 +95,14 @@ def _variant_entries(
     for faq_id, questions in variants.items():
         if faq_id not in faq_ids:
             continue  # Variante zu entfallenem FAQ (nicht in aktuellem Corpus).
+        # Kein Silent-Skip: ein Bare-String statt einer Liste würde
+        # enumerate() über einzelne Zeichen iterieren lassen und den Index
+        # unbemerkt mit einem Chroma-Eintrag pro Buchstaben vergiften.
+        if not isinstance(questions, list) or not all(isinstance(q, str) for q in questions):
+            raise ValueError(
+                f"variants.json: Eintrag für {faq_id!r} muss eine Liste von Strings sein, "
+                f"ist aber {type(questions).__name__!r} ({questions!r})."
+            )
         for i, question in enumerate(questions, 1):
             ids.append(f"{faq_id}#v{i}")
             texts.append(question)
