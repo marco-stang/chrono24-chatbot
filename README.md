@@ -215,8 +215,8 @@ und die Zahlen in diesem Abschnitt gehören nur zur ersten:
 1. **Retrieval-Konfidenz-Gate** (`app/retrieval.py`): kein Treffer, kein
    LLM-Call. Billig, aber grob — gemessen: **50 % der Off-Topic-Fragen**.
 2. **System-Prompt**: „Steht die Antwort nicht im Kontext, sage ehrlich…".
-   Der [LLM-as-Judge-Lauf](#antwortqualität-llm-as-judge) weist 2 korrekte
-   Verweigerungen aus.
+   Der [LLM-as-Judge-Lauf](#antwortqualität-llm-as-judge) weist je nach Lauf
+   1–2 korrekte Verweigerungen aus.
 3. **Laufzeit-Faithcheck**: jeder Antwortsatz wird gegen die zitierten
    Quellen geprüft, siehe
    [Laufzeit-Faithfulness-Check](#laufzeit-faithfulness-check-deterministisch).
@@ -278,23 +278,37 @@ Testfragen durch und lässt einen zweiten Haiku-Call die Antwort anhand des
 tatsächlich gesehenen Kontexts bewerten: `faithful` (sind alle
 Tatsachenaussagen belegt?) und `answered` (voll/teilweise/nein/verweigert).
 
-Ergebnis des Laufs vom 21.08.2026 (33/33 Fragen, Rohdaten in
-`eval/judge_results.json`):
+Zwei Läufe über dieselben 33 Fragen, der zweite im CI nach dem Umbau des
+Konfidenz-Gates und einem Reindex:
 
-| Metrik | Wert |
-|---|---|
-| Faithful-Rate | 100 % (33/33) |
-| answered: voll | 27 |
-| answered: teilweise | 4 |
-| answered: verweigert | 2 |
-| answered: nein | 0 |
+| Metrik | 21.08.2026 (lokal) | 23.08.2026 (CI) |
+|---|---|---|
+| Faithful-Rate | 100 % (33/33) | **94 % (31/33)** |
+| answered: voll | 27 | 25 |
+| answered: teilweise | 4 | 7 |
+| answered: verweigert | 2 | 1 |
+| answered: nein | 0 | 0 |
 
-Alle 4 „teilweise"-Fälle sind treu, aber unvollständig — der Kontext deckt
-nur einen Teilaspekt der Frage ab (z. B. Rückgaberecht als Käufer wird
-erklärt, Rückgabe durch den Verkäufer selbst fehlt im Kontext). Beide
-„verweigert"-Fälle sind laut Judge korrekt: der Kontext liefert wirklich
-keine Antwort auf die konkret gestellte Frage, der Bot lehnt ehrlich ab
-statt zu spekulieren.
+Rohdaten des ersten Laufs in `eval/judge_results.json`; der zweite steht im
+CI-Log des `quality-gate`-Jobs.
+
+Die 94 % sind die interessantere Zahl, weil sie zeigt, was ein einzelner
+Lauf wert ist: Der Judge ist selbst ein LLM und nicht deterministisch, und
+zwischen den Läufen hat sich das Retrieval geändert — welcher Anteil auf
+Judge-Rauschen und welcher auf echtes Verhalten entfällt, trennen zwei
+Läufe nicht. `MIN_FAITHFUL_RATE` steht bei 90 %, das Gate ist also grün,
+aber die 100 % vom ersten Lauf waren erkennbar keine belastbare Bestmarke.
+
+Einer der beiden Treffer ist ein echter inhaltlicher Fehler, kein
+Judge-Artefakt: Auf die Frage nach der französischen Meldepflicht dreht die
+Antwort eine Schwelle um — sie schreibt, Verkäufe würden „nur gemeldet, wenn
+mindestens 20 Verkäufe oder mindestens 3.000 EUR" erreicht sind, während der
+Kontext das Gegenteil sagt (unterhalb dieser Schwelle wird *nicht* gemeldet).
+Der Retrieval-Treffer war korrekt, die Formulierung kippt die Logik. Genau
+dagegen hilft weder eine bessere Hit-Rate noch das Konfidenz-Gate — es ist
+der Fall, für den der Faithcheck und der Judge da sind. Der zweite Treffer
+ist milder: eine Versandkosten-Antwort, die den Auslandsfall aus einer
+zitierten Quelle unterschlägt.
 
 Ehrlicher Hinweis zur Methodik: Der Judge ist derselbe Modelltyp
 (`claude-haiku-4-5`) wie der Chatbot selbst — gleiche Modellfamilie, damit
