@@ -274,10 +274,33 @@ Die Kandidaten-Trefferquote@10 liegt bei 94 % (Tuning) / 100 % (Held-out) — al
 über der Endzahl. Der Engpass sitzt verteilt, nicht an einer Stelle, die ein größeres
 Modell repariert.
 
-**Was wirklich helfen würde:** ein Embedding, das Verkäufer-Fragen von Käufer-Dokumenten
-trennt — also Domänen-Finetuning, kein Modellwechsel von der Stange. Lohnt sich erst mit
-echtem Traffic. Bis dahin ist 91 % / 100 % das Optimum unter allem Gemessenen, und die
-Grenze ist sauber benannt statt weggeredet.
+**Wurzel gefunden (Nachtrag 24.08.):** `paraphrase-multilingual-MiniLM-L12-v2` ist ein
+**Paraphrase-Modell** — es misst Satzähnlichkeit, nicht Frage-Antwort-Passung. Für
+Retrieval die falsche Modellklasse, und man sieht es direkt: faq-0121 („Wie versende ich
+als **Privatverkäufer meine Uhr** sicher?") bekommt **0.870**, weil es die Nomen teilt;
+faq-0098, dessen Variante fast die Frage selbst ist, bekommt **0.495**. Beim page_chunk
+kommt Asymmetrie dazu — kurze Frage gegen langen Fließtext ergibt **0.371**.
+
+**Zwei gezielte Gegenmittel gebaut, gemessen, verworfen:**
+
+- **Doc2Query** für alle 132 page_chunks (568 generierte Fragen, ~132 Haiku-Calls):
+  Similarity 0.371 → 0.475, Rang 130 → 93, **Hit-Rate unverändert**. Ein Vorversuch mit
+  einer *handformulierten* Frage hatte 0.692 erreicht — die generierte sagt „Artikel", die
+  Nutzerfrage sagt „Uhr", und an diesem einen Wort bricht es. Der Code lag fertig samt
+  Tests vor (`generate_variants` nimmt ein doc statt einer Frage, `_variant_entries` öffnet
+  sich für alle Doktypen) und liegt jetzt im **git stash** („verworfen: Doc2Query fuer
+  page_chunks"), falls jemand mit besserem Prompt nachlegen will. Rohdaten:
+  `scratchpad/variants_d2q.json`.
+- **`multilingual-e5-base`** mit fair kalibrierter Merge-Schwelle (0.99, damit gleich viele
+  Duplikate wegfallen wie beim Original — bei 0.95 entfernte e5 18 statt 5 Dokumente und
+  riss dabei Zieldokumente mit; **die erste e5-Messung in Punkt 8 war deshalb ungültig**):
+  91 % / 100 %, **exakt dieselben drei Misses**.
+
+Dass ein komplett anderes, asymmetrisch trainiertes Modell an denselben drei Fällen
+scheitert, ist das stärkste Argument dafür: hier hilft kein Modell von der Stange mehr.
+Was bliebe, ist **Domänen-Finetuning** auf Chrono24-Frage/Antwort-Paaren — begründeter
+Aufwand erst mit echtem Traffic. Bis dahin ist 91 % / 100 % das Optimum unter allem
+Gemessenen, und die Grenze ist sauber benannt statt weggeredet.
 
 ## Bewusst nicht gemacht
 

@@ -106,7 +106,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: `TOP_K_CANDIDATES` 15/20/25/30/40 (erneut, nach den Varianten) | 91 % bis k=25, dann 88 → 85 %; Abstention 50 % → 43 % |
 | verworfen: Reranker nur als *ein* Signal (RRF über Rerank- und Fusionsrang) | 91 % (30/33), neutral bis −3 pp |
 | verworfen: stärkerer Reranker `bge-reranker-v2-m3` (568M) | 0 von 3 Misses gelöst, Latenz 0,7 s → 6,7–10,9 s |
-| verworfen: Embedder `multilingual-e5-base` statt MiniLM | 91 → 88 % Tuning, 100 → 93 % Held-out |
+| verworfen: Embedder `multilingual-e5-base` statt MiniLM (Merge-Schwelle fair kalibriert) | 91 % / 100 %, **exakt dieselben drei Misses** |
+| verworfen: Doc2Query — generierte Fragen auch für `page_chunks` (568 Stück) | 91 % / 100 %, unverändert |
 | verworfen: `RRF_K` 30/10/5/2/1 und Pfad-Gewichte bis 1:2 | Status quo (60, 1:1) ist Optimum; `w_bm=1.5` hebt Tuning auf 100 %, senkt Held-out auf 87 % |
 | verworfen: Rollen-Malus (Verkäufer-Frage wertet „Uhren kaufen"-Kategorien ab) | 91 % bei Malus 0,7/0,5; 88 % ab 0,3 |
 
@@ -232,10 +233,42 @@ ist ein Reranker-Problem** (faq-0033 ist Kandidat und wird auf Platz 8
 gestuft). Die Kandidaten-Trefferquote@10 liegt bei 94 % Tuning / 100 %
 Held-out — sie ist bereits höher als die Endzahl.
 
-Was diese zwei Fälle wirklich lösen würde, ist ein Embedding, das
-Verkäufer-Fragen von Käufer-Dokumenten trennt. Das ist Domänen-Finetuning,
-kein Modellwechsel von der Stange — begründeter Aufwand erst, wenn das
-Projekt echten Traffic sieht.
+#### Warum der Vektorpfad hier versagt
+
+Das Embedding-Modell `paraphrase-multilingual-MiniLM-L12-v2` ist ein
+**Paraphrase-Modell**: es misst, wie ähnlich sich zwei Sätze sind — nicht, ob
+ein Dokument eine Frage beantwortet. Für Retrieval ist das die falsche
+Modellklasse, und man sieht es an den Zahlen. Für
+„Muss ich als privater Verkäufer etwas bezahlen, wenn ich meine Uhr verkaufe?":
+
+| Ähnlichkeit | Dokument |
+|---|---|
+| **0.870** | faq-0121 „Wie versende ich als **Privatverkäufer meine Uhr** sicher?" — teilt die Nomen, beantwortet die Frage nicht |
+| **0.495** | faq-0098, dessen Variante „Wie viel muss ich zahlen, wenn ich etwas auf Chrono24 verkaufe?" fast die Frage selbst ist |
+
+Das Modell belohnt Nomen-Überlappung, nicht Intention. Beim
+`page_chunk`-Fall kommt Asymmetrie dazu: eine kurze Frage gegen einen langen
+Fließtext erreicht **0.371**, während thematisch falsche Kurzfragen 0.77
+erreichen.
+
+**Zwei gezielte Gegenmittel gemessen, beide ohne Wirkung:**
+
+- **Doc2Query** — für alle 132 `page_chunks` Fragen generieren lassen, die
+  der Chunk beantwortet (568 Stück), und mitembedden. Eine handformulierte
+  Frage hatte im Vorversuch 0.371 → 0.692 erreicht, das sah nach dem Fix aus.
+  Real gemessen: Rang 130 → 93, Similarity 0.371 → **0.475**, Hit-Rate
+  **unverändert**. Der Grund steht im Detail: die generierte Frage lautet
+  „Worauf sollte ich prüfen, bevor ich einen **Artikel** … versende?" — sie
+  sagt „Artikel", die Nutzerfrage sagt „Uhr". Wer auf Nomen-Überlappung
+  angewiesen ist, verliert an einem einzigen Wort.
+- **Moderneres Embedding** (`multilingual-e5-base`, asymmetrisch trainiert,
+  mit `query:`/`passage:`-Präfixen, Merge-Schwelle auf gleiche
+  Duplikat-Anzahl kalibriert): 91 % / 100 % — **exakt dieselben drei Misses**.
+
+Dass ein komplett anderes Modell an denselben drei Fällen scheitert, ist das
+stärkste Argument dafür, dass hier kein Modell von der Stange mehr hilft. Was
+bliebe, ist Domänen-Finetuning auf Chrono24-Frage/Antwort-Paaren — begründeter
+Aufwand erst, wenn das Projekt echten Traffic sieht.
 
 ### Held-out-Validierung
 
