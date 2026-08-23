@@ -15,7 +15,7 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 - **Hybrid-Retrieval:** BM25 + Vektorsuche (Chroma), RRF-Fusion,
   Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte Query-Varianten
   je FAQ — 91 % Hit-Rate@5,
-  held-out validiert (93 %)
+  held-out validiert (100 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot „weiß ich nicht" — abgesichert in drei Schichten
   (Retrieval-Gate, Prompt, Faithcheck), jede einzeln gemessen, siehe
@@ -103,6 +103,8 @@ wurde einzeln gemessen, auch die, die erstmal nichts bringt:
 | verworfen: Titel-Exaktheits-Bonus auf den Rerank-Score (α = 0.5–4) | 88 % → 85 % |
 | verworfen: Seitentitel zusätzlich ins `page_chunk`-Embedding | 91 % → 88 % |
 | verworfen: FAQ-Kategorie in den Rerank-Text | 91 % (30/33), exakt neutral |
+| verworfen: `TOP_K_CANDIDATES` 15/20/25/30/40 (erneut, nach den Varianten) | 91 % bis k=25, dann 88 → 85 %; Abstention 50 % → 43 % |
+| verworfen: Reranker nur als *ein* Signal (RRF über Rerank- und Fusionsrang) | 91 % (30/33), neutral bis −3 pp |
 
 A und A+B erreichen exakt dieselbe Trefferquote wie der Status quo, nur mit
 anderer Miss-Verteilung — kein echter Gewinn, nur verschobene Fehler bei
@@ -182,12 +184,31 @@ steht weiter im Corpus, wird aber nicht mehr als Chroma-Metadatum
 indexiert — Daten ohne Abnehmer wären nur eine Einladung, sie für mehr zu
 halten, als sie gemessen sind.
 
-Die 3 verbleibenden Misses sind diagnostizierte harte Fälle — das
-Retrieval findet jeweils die richtige Themenfamilie, aber das falsche
-Familienmitglied: generische Zieldokumente („Was ist Certified?", „Was
-kostet der Kommissionsverkauf?") verlieren gegen spezifischere
-Geschwister, die mehr Wortlaut der Frage tragen. Keine geschönten
-Fragen, keine kaputte Konfidenzschwelle.
+Die 3 verbleibenden Misses sind einzeln diagnostiziert, und die Diagnose ist
+unbequemer als „harte Fälle": **es sind Fehlurteile des Cross-Encoders, nicht
+Lücken im Retrieval.** Setzt man `TOP_K_CANDIDATES` auf 25, liegen alle drei
+Zieldokumente in der Kandidatenmenge — der Reranker stuft sie nur klar negativ:
+
+| Frage | Gold-Dokument | Rerank-Score | Platz 1 stattdessen |
+|---|---|---|---|
+| „Muss ich als privater **Verkäufer** etwas bezahlen …?" | faq-0098 „Was kostet der Verkauf?" (nennt die 6,5 % Provision) | −5,65 | faq-0019 „Was muss ich bei Privatverkäufern beachten?" (+6,52) — **Käufersicht** |
+| „Worauf muss ich als **Verkäufer** achten, bevor ich … verschicke?" | info-escrow-0007 („prüfen Sie den Zahlungseingang, bevor Sie versenden") | −4,69 | faq-0027 „Der Verkäufer bietet nur Vorkasse an. Ist das vertrauenswürdig?" (+0,74) — **Käufersicht** |
+| „Was genau ist das Certified-Programm?" | faq-0033 „Was ist Certified?" | −0,05 | faq-0048 (+4,56), ein spezifischeres Geschwister |
+
+Zwei der drei teilen einen benennbaren Fehlermodus: **Rollenverwechslung
+Käufer ↔ Verkäufer.** Beide Fragen sind aus Verkäufersicht gestellt, beide
+Gold-Dokumente enthalten die Antwort wörtlich, und der Reranker zieht
+stattdessen Dokumente hoch, die dasselbe Vokabular tragen („Privatverkäufer",
+„Vorkasse", „Überweisung"), aber die andere Rolle adressieren. Das
+mehrsprachige MS-MARCO-Modell kennt diese Unterscheidung schlicht nicht.
+
+Zwei Auswege wurden gemessen und beide verworfen (siehe Ablationstabelle):
+mehr Kandidaten fürs Reranking bringt keine Treffer und kostet Abstention
+(50 % → 43 %); den Reranker nur als *ein* Signal zu behandeln und mit dem
+Fusionsrang zu verrechnen, ist neutral bis leicht schlechter. Was hier
+wirklich helfen würde, ist ein stärkerer Reranker — und der ist eine
+Deploy-Entscheidung, kein Parameter (siehe `## Deployment`, der Free-Tier
+trägt schon das aktuelle Modellpaar nur knapp).
 
 ### Held-out-Validierung
 
@@ -197,13 +218,28 @@ zu optimieren, ist real. Als Gegenprobe gibt es `eval/questions_holdout.json`:
 15 neue, nie fürs Tuning verwendete Fragen zu Dokumenten, die im
 Tuning-Set nicht als Ziel vorkommen (11 FAQ-, 4 Seiten-Chunk-Ziele, 2
 englisch), einmalig gegen die finale Konfiguration gemessen:
-**93 % (14/15)**. Das liegt sogar leicht über der Tuning-Zahl (91 %) —
-kein Anzeichen für schweres Eval-Set-Overfitting, weil ein System, das nur
-auf die 33 Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich
-stärker einbrechen würde. Die später ergänzte Synonym-Expansion wurde
-damals auf dem Held-out gegengeprüft: exakt gleiche Treffer (13/15), kein
-Fall kippt — die aktuelle Zahl (14/15) stammt aus dem Überfetch-Fix des
-Vektorpfads für Query-Varianten, siehe oben.
+**100 % (15/15)**. Das liegt über der Tuning-Zahl (91 %) — kein Anzeichen
+für schweres Eval-Set-Overfitting, weil ein System, das nur auf die 33
+Tuning-Fragen zugeschnitten wäre, auf neuen Fragen deutlich stärker
+einbrechen würde.
+
+Die Entwicklung dieser Zahl gehört dazu: 87 % (13/15) beim ersten Lauf,
+93 % nach dem Überfetch-Fix des Vektorpfads, und 100 % erst, seit die Eval
+denselben Pfad misst wie der Live-Bot. **Die letzten 7 Punkte sind kein
+Fortschritt am System, sondern eine korrigierte Messung.** Der Live-Bot
+schickt nicht-deutsche Fragen erst durch `rewrite_query`, bevor sie das
+Retrieval sehen — BM25 arbeitet auf einem deutschen Korpus, eine englische
+Query bekommt dort einen Score von exakt 0. Die Eval tat das nicht und
+zählte „Where do I actually have to pay the customs duties…?" als Miss,
+obwohl der Bot das Dokument in Produktion findet. Sie maß einen Pfad, den
+es nirgends gibt.
+
+Damit der `eval-gate`-Job weiterhin ohne API-Kosten läuft, sind die fünf
+Umformulierungen einmalig offline erzeugt und liegen als Feld `rewritten`
+in den Fragen-JSONs — dasselbe Muster wie `data/variants.json`. Die
+Konsequenz steht offen dabei: es sind eingefrorene Umformulierungen, kein
+Live-Call. Ändert sich der Rewrite-Prompt, muss das Feld neu erzeugt
+werden, sonst misst die Eval wieder etwas anderes als Produktion.
 
 ### Konfidenz-Gate für themenfremde Fragen
 
@@ -257,7 +293,7 @@ dem on-topic-Minimum. Gegen dieselben Daten gerechnet:
 | zusätzlich **oder** `rerank < -6.0` (aktiv) | **7/14 (50 %)** | **0** |
 | … mit `rerank < -5.0` stattdessen | 9/14 | 1 (Versand-Frage) |
 
-Hit-Rate bleibt unverändert (91 % / 93 %). Die 7 Durchrutscher sind genau
+Hit-Rate bleibt unverändert (damals 91 % / 93 %). Die 7 Durchrutscher sind genau
 die gewollt domänennahen Fragen („Wie viel ist meine Omega wert?",
 „eBay-Rückgabe im Vergleich zu Chrono24?", Versicherungsvergleich) — die
 landen auf thematisch benachbarten FAQs, kein Retrieval-Signal kann sie vom

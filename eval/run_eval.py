@@ -8,12 +8,13 @@ QUESTIONS_PATH = Path("eval/questions.json")
 HOLDOUT_QUESTIONS_PATH = Path("eval/questions_holdout.json")
 OFFTOPIC_QUESTIONS_PATH = Path("eval/questions_offtopic.json")
 
-# Aktuell gemessen (nach dem Vektor-Überfetch-Fix, siehe README): Tuning 91 %
-# (30/33), Holdout 93 % (14/15) — Schwellen bewusst mit Puffer für
-# Einzelfrage-Rauschen (33/15 Fragen sind ein kleines Sample) und nach jeder
-# bewussten Verbesserung hier nachziehen, nicht nur nach oben schieben.
+# Aktuell gemessen: Tuning 91 % (30/33), Holdout 100 % (15/15) — letzteres seit
+# die Eval nicht-deutsche Fragen umgeschrieben misst (siehe eval_query), also
+# denselben Pfad wie der Live-Bot. Schwellen sind ein Regressionsboden mit rund
+# zwei Fragen Puffer für Einzelfrage-Rauschen, keine Bestmarke: bei 33 bzw. 15
+# Fragen wiegt eine Frage 3 bzw. 6,7 Prozentpunkte.
 TUNING_MIN_HIT_RATE = 0.85
-HOLDOUT_MIN_HIT_RATE = 0.80
+HOLDOUT_MIN_HIT_RATE = 0.86
 # Anteil themenfremder Fragen, bei denen der Bot leer zurückgibt (siehe
 # app.retrieval: SIM_THRESHOLD / BM25_THRESHOLD / RERANK_THRESHOLD, ODER-
 # verknüpft). Gemessen auf eval/questions_offtopic.json (14 Fragen, gemischt
@@ -33,11 +34,22 @@ def _questions_path(argv: list[str]) -> Path:
     return QUESTIONS_PATH
 
 
+def eval_query(item: dict) -> str:
+    """Die Frage so, wie das Retrieval sie im Live-Betrieb sieht.
+
+    Nicht-deutsche Fragen laufen dort erst durch rewrite_query (BM25 arbeitet auf
+    deutschem Korpus). Die Umformulierung ist offline erzeugt und liegt als Feld
+    `rewritten` im Fragen-JSON -- wie data/variants.json, damit der CI-Job ohne
+    API-Kosten denselben Pfad misst, den Nutzer treffen.
+    """
+    return item.get("rewritten") or item["question"]
+
+
 def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, list[dict]]:
     misses = []
     hits = 0
     for item in questions:
-        ids = [d.id for d in retriever.retrieve(item["question"], top_k=k)]
+        ids = [d.id for d in retriever.retrieve(eval_query(item), top_k=k)]
         if item["expected_doc_id"] in ids:
             hits += 1
         else:

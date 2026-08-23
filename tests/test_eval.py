@@ -54,3 +54,33 @@ def test_questions_path_defaults_to_tuning_set():
 def test_questions_path_uses_custom_flag():
     assert _questions_path(["--questions", "eval/questions_holdout.json"]) == \
         Path("eval/questions_holdout.json")
+
+
+def test_hit_rate_uses_offline_rewrite_when_present():
+    """Der Live-Bot schickt nicht-deutsche Fragen durch rewrite_query, bevor sie
+    das Retrieval sehen (BM25 arbeitet auf deutschem Korpus). Die Eval tat das
+    nicht und mass damit einen Pfad, den es in Produktion nicht gibt --
+    'Where do I pay the customs duties?' galt als Miss, obwohl der Bot das
+    Dokument findet. Die Umformulierung liegt offline erzeugt im Fragen-JSON,
+    damit der CI-Job weiter ohne API-Kosten laeuft."""
+    retriever = StubRetriever({
+        "Wo bezahle ich Zollgebühren?": ["faq-0025"],
+        "Where do I pay the customs duties?": ["faq-0999"],
+    })
+    questions = [{
+        "question": "Where do I pay the customs duties?",
+        "rewritten": "Wo bezahle ich Zollgebühren?",
+        "expected_doc_id": "faq-0025",
+    }]
+    rate, misses = hit_rate_at_k(retriever, questions, k=5)
+    assert rate == 1.0
+    assert misses == []
+
+
+def test_hit_rate_falls_back_to_question_without_rewrite():
+    """Deutsche Fragen tragen kein rewritten-Feld -- der Live-Bot laesst sie
+    ebenfalls unangetastet durch."""
+    retriever = StubRetriever({"Was kostet der Verkauf?": ["faq-0098"]})
+    questions = [{"question": "Was kostet der Verkauf?", "expected_doc_id": "faq-0098"}]
+    rate, _ = hit_rate_at_k(retriever, questions, k=5)
+    assert rate == 1.0

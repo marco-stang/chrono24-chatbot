@@ -1,17 +1,64 @@
 [
-  {"question": "Was genau steht eigentlich alles auf so einem Echtheitszertifikat drauf?", "expected_doc_id": "faq-0040"},
-  {"question": "Mit wie viel Wartezeit muss ich rechnen, bis meine Uhr bei Chrono24 Certified durchgeprüft ist?", "expected_doc_id": "faq-0053"},
-  {"question": "Was bedeutet eigentlich die Abkürzung DAC bei DAC 7?", "expected_doc_id": "faq-0164"},
-  {"question": "Gebt ihr meine Kundendaten auch an andere Unternehmen weiter?", "expected_doc_id": "faq-0161"},
-  {"question": "Wie lange darf Chrono24 meine Uhr maximal in Kommission behalten, bevor sie zurückgeht?", "expected_doc_id": "faq-0148"},
-  {"question": "Innerhalb welcher Frist muss ich mich melden, wenn beim Käuferschutz etwas schiefgelaufen ist?", "expected_doc_id": "faq-0060"},
-  {"question": "Wieso hab ich als Verkäufer plötzlich eine Mail bekommen, dass mein Verkauf den Steuerbehörden gemeldet wird?", "expected_doc_id": "faq-0180"},
-  {"question": "Bei welchen Aktionen in meinem Konto muss ich mich zusätzlich per 2-Faktor bestätigen?", "expected_doc_id": "faq-0129"},
-  {"question": "Wie lange bleibt meine Anzeige als Privatverkäufer aktiv, bevor sie von selbst verschwindet?", "expected_doc_id": "faq-0100"},
-  {"question": "Where do I actually have to pay the customs duties for a watch I'm importing?", "expected_doc_id": "faq-0025"},
-  {"question": "Kannst du mir erklären, wozu die Watch Collection überhaupt gut ist?", "expected_doc_id": "faq-0090"},
-  {"question": "Was versteht man unter der Gangreserve bei einer mechanischen Uhr?", "expected_doc_id": "info-lexikon-0007"},
-  {"question": "Was genau bedeutet der Uhrenzustand 'Gut' mit mittleren Gebrauchsspuren?", "expected_doc_id": "info-conditions-0004"},
-  {"question": "Von wann stammt eigentlich die aktuell gültige Version der Chrono24-Datenschutzerklärung?", "expected_doc_id": "info-datenschutz-0044"},
-  {"question": "How exactly is a watch's water resistance measured and stated?", "expected_doc_id": "info-lexikon-0021"}
+  {
+    "question": "Was genau steht eigentlich alles auf so einem Echtheitszertifikat drauf?",
+    "expected_doc_id": "faq-0040"
+  },
+  {
+    "question": "Mit wie viel Wartezeit muss ich rechnen, bis meine Uhr bei Chrono24 Certified durchgeprüft ist?",
+    "expected_doc_id": "faq-0053"
+  },
+  {
+    "question": "Was bedeutet eigentlich die Abkürzung DAC bei DAC 7?",
+    "expected_doc_id": "faq-0164"
+  },
+  {
+    "question": "Gebt ihr meine Kundendaten auch an andere Unternehmen weiter?",
+    "expected_doc_id": "faq-0161"
+  },
+  {
+    "question": "Wie lange darf Chrono24 meine Uhr maximal in Kommission behalten, bevor sie zurückgeht?",
+    "expected_doc_id": "faq-0148"
+  },
+  {
+    "question": "Innerhalb welcher Frist muss ich mich melden, wenn beim Käuferschutz etwas schiefgelaufen ist?",
+    "expected_doc_id": "faq-0060"
+  },
+  {
+    "question": "Wieso hab ich als Verkäufer plötzlich eine Mail bekommen, dass mein Verkauf den Steuerbehörden gemeldet wird?",
+    "expected_doc_id": "faq-0180"
+  },
+  {
+    "question": "Bei welchen Aktionen in meinem Konto muss ich mich zusätzlich per 2-Faktor bestätigen?",
+    "expected_doc_id": "faq-0129"
+  },
+  {
+    "question": "Wie lange bleibt meine Anzeige als Privatverkäufer aktiv, bevor sie von selbst verschwindet?",
+    "expected_doc_id": "faq-0100"
+  },
+  {
+    "question": "Where do I actually have to pay the customs duties for a watch I'm importing?",
+    "expected_doc_id": "faq-0025",
+    "rewritten": "Wo muss ich die Zollgebühren für eine Uhr, die ich importiere, tatsächlich bezahlen?"
+  },
+  {
+    "question": "Kannst du mir erklären, wozu die Watch Collection überhaupt gut ist?",
+    "expected_doc_id": "faq-0090"
+  },
+  {
+    "question": "Was versteht man unter der Gangreserve bei einer mechanischen Uhr?",
+    "expected_doc_id": "info-lexikon-0007"
+  },
+  {
+    "question": "Was genau bedeutet der Uhrenzustand 'Gut' mit mittleren Gebrauchsspuren?",
+    "expected_doc_id": "info-conditions-0004"
+  },
+  {
+    "question": "Von wann stammt eigentlich die aktuell gültige Version der Chrono24-Datenschutzerklärung?",
+    "expected_doc_id": "info-datenschutz-0044"
+  },
+  {
+    "question": "How exactly is a watch's water resistance measured and stated?",
+    "expected_doc_id": "info-lexikon-0021",
+    "rewritten": "Wie wird die Wasserdichtigkeit einer Uhr genau gemessen und angegeben?"
+  }
 ]
