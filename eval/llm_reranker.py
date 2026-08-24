@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from app.config import settings
-from app.retrieval import RetrievedDoc, _dedupe_ranking
+from app.retrieval import RetrievedDoc, _dedupe_ranking, TOP_K_CANDIDATES, Retriever
 
 MAX_LLM_RERANK_TOKENS = 400
 
@@ -82,3 +82,21 @@ async def llm_two_signal_rerank(
     )
     text = next((b.text for b in response.content if b.type == "text"), "").strip()
     return _parse_response(text, len(docs))
+
+
+def two_signal_candidates(
+    retriever: Retriever, query: str, audience: str | None
+) -> tuple[list[RetrievedDoc], bool]:
+    """Baut die Kandidatenmenge wie Retriever.retrieve(), aber als
+    Vereinigung statt RRF-Top-n-Cut (Kandidaten-Union-Fix, siehe Spec).
+    Zweiter Rueckgabewert: ob Stufe 1 des bestehenden Gates (sim/bm25-
+    Schwelle) ueberhaupt Kandidaten durchlaesst."""
+    total = retriever.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+    n = min(TOP_K_CANDIDATES, total)
+    vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
+    bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
+    if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
+        return [], False
+    ids = union_candidates(vector_ranking, bm25_ranking)
+    docs = [retriever._to_doc(doc_id, 0.0) for doc_id in ids]
+    return docs, True

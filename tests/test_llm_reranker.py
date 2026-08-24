@@ -121,3 +121,56 @@ async def test_llm_two_signal_rerank_falls_back_on_malformed_response():
     ranking, confidence = await llm_two_signal_rerank("Frage?", DOCS, client)
     assert ranking == [0, 1]
     assert confidence == 0.0
+
+
+import json
+
+from pipeline.index import build_index
+from app.retrieval import Retriever
+from eval.llm_reranker import two_signal_candidates
+
+_CORPUS_DOCS = [
+    {"id": "faq-0001", "type": "faq", "question": "Wie funktioniert der Käuferschutz?",
+     "answer": "Der Käuferschutz sichert deine Zahlung ab.", "category": "Kaufen",
+     "url": "https://www.chrono24.de/info/faqs.htm"},
+    {"id": "faq-0002", "type": "faq", "question": "Wie verkaufe ich eine Uhr?",
+     "answer": "Über ein Verkäuferkonto.", "category": "Verkaufen",
+     "url": "https://www.chrono24.de/info/faqs.htm"},
+    {"id": "info-shipping-0001", "type": "page_chunk", "title": "Versand",
+     "heading": "Versicherter Versand", "text": "Uhren werden versichert verschickt.",
+     "url": "https://www.chrono24.de/info/shipping.htm"},
+]
+
+_DOC_VECS = {"Käuferschutz": [1.0, 0.0, 0.0], "verkaufe": [0.0, 1.0, 0.0],
+             "Versand": [0.0, 0.0, 1.0]}
+
+
+def _encode_one(text):
+    for key, vec in _DOC_VECS.items():
+        if key in text:
+            return vec
+    return [-1.0, 0.0, 0.0]
+
+
+def _build_retriever(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": _CORPUS_DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [_encode_one(t) for t in texts])
+    return Retriever(index_dir, corpus_path, encoder=_encode_one, reranker=False,
+                     bm25_threshold=1.0)
+
+
+def test_two_signal_candidates_returns_union_when_gate_open(tmp_path):
+    retriever = _build_retriever(tmp_path)
+    docs, gate_open = two_signal_candidates(retriever, "Wie funktioniert der Käuferschutz?", None)
+    assert gate_open is True
+    assert {d.id for d in docs} == {"faq-0001", "faq-0002", "info-shipping-0001"}
+
+
+def test_two_signal_candidates_closes_gate_for_offtopic(tmp_path):
+    retriever = _build_retriever(tmp_path)
+    docs, gate_open = two_signal_candidates(retriever, "Gedicht über Katzen bitte", None)
+    assert gate_open is False
+    assert docs == []
