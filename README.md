@@ -54,6 +54,12 @@ ausschließlich der öffentliche Hilfebereich von chrono24.de.
 Zwei getrennte Läufe: eine lokale Offline-Pipeline baut den Index, der
 Online-Service liest ihn nur noch — er scrapt zur Laufzeit nie.
 
+**Der Weg einer Anfrage** (Online-Service, Kernpfad):
+
+![Weg einer Anfrage: Frage → Vorverarbeitung → Hybrid-Retrieval (BM25 + Vektor, Kandidaten-Union) → LLM-Reranker (Claude) → Claude Haiku → Faithcheck](docs/img/pipeline-diagram.png)
+
+Interaktiv (gleicher Inhalt): [docs/pipeline.html](docs/pipeline.html).
+
 ```
 Offline-Pipeline (lokal, einmalig bzw. bei Bedarf)
 ───────────────────────────────────────────────────
@@ -67,7 +73,8 @@ Online-Service (Docker)
 Browser-Chat-UI (statisches HTML/JS, von FastAPI ausgeliefert)
    ↓ POST /api/chat (SSE-Stream zurück)
 FastAPI
-   ├─ Retrieval: BM25 + Vektor → RRF-Fusion → Top 5
+   ├─ Retrieval: BM25 + Vektor → Kandidaten-Union → LLM-Reranker (Claude,
+   │             Default) → Top 5
    ├─ Claude Haiku: Antwort nur aus Kontext, mit Quellen
    └─ Guards: IP-Rate-Limit, Tages-Token-Budget
 ```

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Chrono24-FAQ-Chatbot — Anfrage → Antwort</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #eef2ef;
+    --card: #ffffff;
+    --ink: #17281f;
+    --muted: #64766d;
+    --border: #d8e1db;
+    --green: #00654a;
+    --green-soft: #e2f0ea;
+    --green-line: #b7cfc3;
+    --bot: #2563eb;
+    --amber: #b45309;
+    --slate: #3f5b73;
+    --slate-soft: #e7edf1;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.5rem;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { margin-bottom: 1.75rem; }
+  h1 { font-size: 1.4rem; font-weight: 650; letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 0.3rem; max-width: 640px; }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    column-gap: 1.75rem;
+    row-gap: 0;
+    align-items: stretch;
+  }
+
+  .col-label {
+    font-size: 0.7rem; font-weight: 650; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.5rem;
+  }
+
+  /* Pipeline-Spur: durchgehende Rail-Linie hinter dem Pfeil, Glyph
+     maskiert die Linie mit dem Seitenhintergrund -- gleiches Muster wie
+     die Betreuer-Zeitachse in static/style.css (.lane.line). */
+  .arrow-main {
+    position: relative;
+    height: 2.1rem;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+  }
+  .arrow-main::before {
+    content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 2px; background: var(--border); transform: translateX(-50%);
+  }
+  .arrow-main .glyph {
+    position: relative; z-index: 1; background: var(--bg);
+    padding: 0.15rem 0.4rem; font-size: 1.15rem; line-height: 1;
+  }
+  .arrow-main .tag {
+    position: absolute; left: calc(50% + 1rem); z-index: 1;
+    background: var(--bg); padding: 0 0.2rem;
+    font-size: 0.66rem; white-space: nowrap;
+  }
+
+  /* Beispiel-Spur: bewusst leichter (kleiner, blasser, ohne Rail) --
+     zweitrangig gegenueber der Pipeline. */
+  .arrow-note {
+    height: 2.1rem;
+    display: flex; align-items: center; justify-content: center;
+    color: #8fab9d; font-size: 1rem; line-height: 1;
+  }
+
+  .box {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--muted);
+    border-radius: 10px;
+    padding: 0.85rem 1rem 0.85rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .box h2 { font-size: 0.95rem; font-weight: 650; }
+  .box p { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
+
+  .step {
+    position: absolute; top: -0.6rem; left: -0.6rem;
+    width: 1.4rem; height: 1.4rem; border-radius: 50%;
+    background: var(--ink); color: var(--bg);
+    font-size: 0.68rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+  }
+
+  .box.user { border-left-color: #8b9a92; }
+  .box.pre { border-left-color: var(--amber); }
+  .box.retrieval { border-left-color: var(--slate); }
+  .box.rerank { border-left-color: var(--bot); }
+  .box.llm { border-left-color: var(--bot); }
+  .box.faith { border-left-color: var(--green); }
+
+  .retrieval-inner {
+    display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem;
+  }
+  .chips { display: flex; gap: 0.4rem; }
+  .chip {
+    flex: 1; background: var(--slate-soft); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.3rem 0.4rem; font-size: 0.72rem; text-align: center;
+  }
+  .chip b { display: block; font-size: 0.76rem; color: var(--slate); }
+  .fusion {
+    text-align: center; font-size: 0.72rem; color: var(--muted);
+    border-top: 1px dashed var(--border); padding-top: 0.35rem;
+  }
+  .fusion b { color: var(--ink); }
+
+  .note {
+    background: var(--green-soft);
+    border: 1px dashed var(--green-line);
+    border-radius: 10px;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.76rem;
+    color: var(--ink);
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .note b {
+    display: block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--green); margin-bottom: 0.3rem;
+  }
+
+  .legend {
+    margin-top: 1.75rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .legend .row { display: flex; gap: 0.5rem; align-items: baseline; }
+  .legend .mark { color: var(--amber); font-weight: 700; flex-shrink: 0; }
+  .legend .mark.claude { color: var(--bot); }
+  .legend code {
+    color: var(--green); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.78rem;
+  }
+
+  footer {
+    margin-top: 1.25rem; font-size: 0.78rem; color: var(--muted);
+    border-top: 1px solid var(--border); padding-top: 0.6rem;
+  }
+  footer a { color: var(--green); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Chrono24-FAQ-Chatbot — der Weg einer Anfrage</h1>
+    <p class="subtitle">Vom Chat-Eingabefeld bis zur geprüften Antwort. Handover-Briefing (Übergabe an Menschen) ist ein eigener Pfad und hier bewusst ausgeklammert — siehe README.</p>
+  </header>
+
+  <div class="flow">
+    <div class="col-label">Pipeline</div>
+    <div class="col-label">Beispiel — wie ein Satz durchläuft</div>
+
+    <div class="box user">
+      <span class="step">1</span>
+      <h2>Frage</h2>
+      <p>Chat-UI im Browser<br><code style="color:var(--muted)">POST /api/chat</code> (SSE-Stream zurück)</p>
+    </div>
+    <div class="note"><b>Eingabe</b>„Muss ich als Verkäufer eine Provision zahlen?“</div>
+
+    <div class="arrow-main"><span class="glyph">↓</span></div>
+    <div class="arrow-note">↓</div>
+
+    <div class="box pre">
+      <span class="step">2</span>
+      <h2>Vorverarbeitung</h2>
+      <p>Rollen-Erkennung: Käufer oder Verkäufer, per Wortstamm-Heuristik aus der Frage</p>
+    </div>
+    <div class="note"><b>Rolle</b>Stamm „verkauf“ erkannt → Audience = <code style="color:var(--green)">verkaeufer</code></div>
+
+    <div class="arrow-main"><span class="glyph">↓</span></div>
+    <div class="arrow-note">↓</div>
+
+    <div class="box retrieval">
+      <span class="step">3</span>
+      <h2>Hybrid-Retrieval</h2>
+      <div class="retrieval-inner">
+        <div class="chips">
+          <div class="chip"><b>BM25</b>FTS5 + Synonyme</div>
+          <div class="chip"><b>Vektor</b>sqlite-vec, Cosine</div>
+        </div>
+        <div class="fusion"><b>Kandidaten-Union</b> (BM25 ∪ Vektor)</div>
+      </div>
+    </div>
+    <div class="note"><b>Kandidaten</b>Beide Pfade finden faq-0098 „Was kostet der Verkauf?“ — Union statt Rangfusion, das Sortieren übernimmt gleich das LLM</div>
+
+    <div class="arrow-main"><span class="glyph">↓</span></div>
+    <div class="arrow-note">↓</div>
+
+    <div class="box rerank">
+      <span class="step">4</span>
+      <h2>LLM-Reranker</h2>
+      <p>Claude Haiku ordnet die Kandidaten und schätzt die Konfidenz von Platz 1 (Default; Cross-Encoder per Flag als Rollback)</p>
+    </div>
+    <div class="note"><b>Rang</b>faq-0098 auf Platz 1, Konfidenz 9/10 — kein Rollen-Verwechsler wie bei ähnlichen Käufer-FAQs</div>
+
+    <div class="arrow-main"><span class="glyph">↓</span><span class="tag">Top 5</span></div>
+    <div class="arrow-note">↓</div>
+
+    <div class="box llm">
+      <span class="step">5</span>
+      <h2>Claude Haiku</h2>
+      <p>Antwort nur aus dem Kontext, Quellenangaben <code>[n]</code></p>
+    </div>
+    <div class="note"><b>Antwort</b>„Der Verkauf kostet 6,5 % Provision auf den Verkaufspreis [1].“</div>
+
+    <div class="arrow-main"><span class="glyph">↓</span></div>
+    <div class="arrow-note">↓</div>
+
+    <div class="box faith">
+      <span class="step">6</span>
+      <h2>Faithcheck</h2>
+      <p>Jeder Satz gegen die zitierte Quelle geprüft, Ampel im UI</p>
+    </div>
+    <div class="note"><b>Prüfung</b>Satz zitiert [1], Wortüberlappung hoch → <span style="color:var(--green); font-weight:650;">PASS</span></div>
+  </div>
+
+  <div class="legend">
+    <div class="row">
+      <span class="mark">✗</span>
+      <span>Zwei Konfidenz-Gates auf dem Weg: reicht die BM25-/Vektor-Ähnlichkeit nach dem Retrieval nicht, oder liegt die LLM-Konfidenz für Platz 1 unter der Schwelle, antwortet der Bot sofort mit „Dazu finde ich nichts in den Chrono24-Hilfeseiten." — ohne den zweiten, teureren Claude-Call.</span>
+    </div>
+    <div class="row">
+      <span class="mark claude">2×</span>
+      <span>Claude Haiku übernimmt zwei getrennte Jobs mit zwei getrennten API-Calls (beide Boxen blau): erst Reranking (Rangfolge + Konfidenz), danach die eigentliche Antwort — nicht derselbe Aufruf. Hybrid-Retrieval bleibt bewusst grau: reines SQL, kein LLM.</span>
+    </div>
+    <div class="row">
+      <span class="mark">i</span>
+      <span>Jedes FAQ-Paar bleibt ein eigenes Dokument (kein Chunking); die Vektorsuche embedded gezielt die Frage, nicht die Antwort — Frage-auf-Frage-Matching.</span>
+    </div>
+  </div>
+
+  <footer>
+    Messwerte, Ablationstabelle und Begründungen: <a href="../README.md">README.md</a>
+  </footer>
+</div>
+</body>
+</html>
