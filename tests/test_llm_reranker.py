@@ -1,11 +1,15 @@
-from app.retrieval import RetrievedDoc
+import json
+
+from app.retrieval import RetrievedDoc, Retriever
 from eval.llm_reranker import (
     _parse_response,
     _system_prompt,
     build_llm_rerank_prompt,
     llm_two_signal_rerank,
+    two_signal_candidates,
     union_candidates,
 )
+from pipeline.index import build_index
 
 DOCS = [
     RetrievedDoc(id="faq-0001", type="faq", title="Frage A",
@@ -35,38 +39,94 @@ def test_build_llm_rerank_prompt_numbers_candidates_from_zero():
 
 
 def test_parse_response_accepts_valid_json():
-    ranking, confidence = _parse_response('{"ranking": [1, 0], "top1_confidence": 8}', n=2)
+    ranking, confidence, used_fallback = _parse_response(
+        '{"ranking": [1, 0], "top1_confidence": 8}', n=2)
     assert ranking == [1, 0]
     assert confidence == 8.0
+    assert used_fallback is False
 
 
 def test_parse_response_falls_back_to_identity_ranking_on_incomplete_array():
-    ranking, _ = _parse_response('{"ranking": [0], "top1_confidence": 7}', n=2)
+    ranking, _, used_fallback = _parse_response('{"ranking": [0], "top1_confidence": 7}', n=2)
     assert ranking == [0, 1]
+    assert used_fallback is True
 
 
 def test_parse_response_falls_back_to_zero_confidence_when_missing():
-    ranking, confidence = _parse_response('{"ranking": [1, 0]}', n=2)
+    ranking, confidence, used_fallback = _parse_response('{"ranking": [1, 0]}', n=2)
     assert confidence == 0.0
     assert ranking == [1, 0]
+    assert used_fallback is True
 
 
 def test_parse_response_falls_back_to_zero_confidence_when_out_of_range():
-    _, confidence = _parse_response('{"ranking": [1, 0], "top1_confidence": 15}', n=2)
+    _, confidence, used_fallback = _parse_response(
+        '{"ranking": [1, 0], "top1_confidence": 15}', n=2)
     assert confidence == 0.0
+    assert used_fallback is True
 
 
 def test_parse_response_falls_back_to_zero_confidence_on_boolean_value():
     # bool ist in Python eine int-Subklasse -- ohne expliziten Ausschluss
     # würde True fälschlich zu 1.0 statt zum konservativen Fallback.
-    _, confidence = _parse_response('{"ranking": [1, 0], "top1_confidence": true}', n=2)
+    _, confidence, used_fallback = _parse_response(
+        '{"ranking": [1, 0], "top1_confidence": true}', n=2)
     assert confidence == 0.0
+    assert used_fallback is True
 
 
 def test_parse_response_falls_back_completely_on_malformed_json():
-    ranking, confidence = _parse_response("not json at all", n=2)
+    ranking, confidence, used_fallback = _parse_response("not json at all", n=2)
     assert ranking == [0, 1]
     assert confidence == 0.0
+    assert used_fallback is True
+
+
+def test_parse_response_falls_back_on_mixed_type_ranking():
+    # [0, "1"] darf nicht crashen (sorted() auf gemischten Typen wirft
+    # TypeError) und muss konservativ auf die Identitaet zurueckfallen.
+    # top1_confidence selbst ist hier valide (8) und bleibt unangetastet --
+    # nur used_fallback markiert, dass die Rangfolge nicht vom Modell kam.
+    ranking, confidence, used_fallback = _parse_response(
+        '{"ranking": [0, "1"], "top1_confidence": 8}', n=2)
+    assert ranking == [0, 1]
+    assert confidence == 8.0
+    assert used_fallback is True
+
+
+def test_parse_response_falls_back_on_float_ranking():
+    # [0.0, 1.0] besteht sorted(ranking) == identity (Gleichheit mit ints),
+    # crasht aber danach bei docs[ranking[0]] mit "list indices must be
+    # integers" -- muss deshalb schon hier als ungueltig erkannt werden.
+    ranking, confidence, used_fallback = _parse_response(
+        '{"ranking": [0.0, 1.0], "top1_confidence": 8}', n=2)
+    assert ranking == [0, 1]
+    assert confidence == 8.0
+    assert used_fallback is True
+
+
+def test_parse_response_falls_back_on_boolean_in_ranking():
+    # bool ist eine int-Subklasse -- [true, 0] darf nicht als [True, 0]
+    # durchgehen, sonst inkonsistent zum expliziten bool-Ausschluss bei
+    # confidence zwei Zeilen darunter.
+    ranking, confidence, used_fallback = _parse_response(
+        '{"ranking": [true, 0], "top1_confidence": 8}', n=2)
+    assert ranking == [0, 1]
+    assert confidence == 8.0
+    assert used_fallback is True
+
+
+def test_parse_response_used_fallback_distinguishes_parse_failure_from_genuine_low_confidence():
+    genuine_ranking, genuine_confidence, genuine_fallback = _parse_response(
+        '{"ranking": [1, 0], "top1_confidence": 0}', n=2)
+    broken_ranking, broken_confidence, broken_fallback = _parse_response(
+        "not json at all", n=2)
+    # Beide liefern confidence 0.0 -- ohne used_fallback nicht
+    # unterscheidbar, mit used_fallback schon.
+    assert genuine_confidence == broken_confidence == 0.0
+    assert genuine_fallback is False
+    assert broken_fallback is True
+    assert genuine_ranking != broken_ranking or genuine_fallback != broken_fallback
 
 
 def test_union_candidates_dedupes_keeping_first_occurrence():
@@ -103,9 +163,10 @@ class _FakeClient:
 
 async def test_llm_two_signal_rerank_returns_parsed_ranking_and_confidence():
     client = _FakeClient('{"ranking": [1, 0], "top1_confidence": 9}')
-    ranking, confidence = await llm_two_signal_rerank("Frage?", DOCS, client)
+    ranking, confidence, used_fallback = await llm_two_signal_rerank("Frage?", DOCS, client)
     assert ranking == [1, 0]
     assert confidence == 9.0
+    assert used_fallback is False
 
 
 async def test_llm_two_signal_rerank_pins_temperature_and_token_limit():
@@ -114,20 +175,16 @@ async def test_llm_two_signal_rerank_pins_temperature_and_token_limit():
     call = client.messages.calls[0]
     assert call["temperature"] == 0
     assert call["max_tokens"] == 400
+    assert f"genau {len(DOCS)} nummerierte" in call["system"]
 
 
 async def test_llm_two_signal_rerank_falls_back_on_malformed_response():
     client = _FakeClient("kaputte Antwort, kein JSON")
-    ranking, confidence = await llm_two_signal_rerank("Frage?", DOCS, client)
+    ranking, confidence, used_fallback = await llm_two_signal_rerank("Frage?", DOCS, client)
     assert ranking == [0, 1]
     assert confidence == 0.0
+    assert used_fallback is True
 
-
-import json
-
-from pipeline.index import build_index
-from app.retrieval import Retriever
-from eval.llm_reranker import two_signal_candidates
 
 _CORPUS_DOCS = [
     {"id": "faq-0001", "type": "faq", "question": "Wie funktioniert der Käuferschutz?",
@@ -177,15 +234,13 @@ def test_two_signal_candidates_closes_gate_for_offtopic(tmp_path):
 
 
 def test_two_signal_candidates_union_vs_rrf_cut(tmp_path, monkeypatch):
-    """Verify union (not RRF-top-n-cut) when n < total.
+    """Verify union (not RRF-top-n-cut) with divergent vector/bm25 rankings.
 
     The fix: union_candidates([vector_top_2], [bm25_top_2]) yields 3 docs
     when rankings diverge, while naive RRF-fuse-then-cut-to-2 would yield only 2.
-    Monkeypatch TOP_K_CANDIDATES to 2, mock divergent rankings, verify all 3 docs.
+    _vector_candidates/_bm25_candidates are mocked directly (both ignore `n`),
+    so TOP_K_CANDIDATES is irrelevant here -- only the divergent rankings matter.
     """
-    # Monkeypatch TOP_K_CANDIDATES so n=min(2, total) = 2 < total
-    monkeypatch.setattr("eval.llm_reranker.TOP_K_CANDIDATES", 2)
-
     retriever = _build_retriever(tmp_path)
 
     # Mock rankings to have a split: vector=[A, B], bm25=[A, C]

@@ -1,3 +1,6 @@
+import json
+
+from eval.run_eval import OFFTOPIC_QUESTIONS_PATH, QUESTIONS_PATH
 from eval.run_llm_reranker_experiment import (
     KNOWN_MISS_IDS,
     OFFTOPIC_SAMPLE_INDICES,
@@ -26,3 +29,13 @@ def test_known_miss_cases_filters_only_documented_ids():
 def test_offtopic_sample_selects_configured_indices():
     sample = _offtopic_sample(_OFFTOPIC_QUESTIONS)
     assert sample == [_OFFTOPIC_QUESTIONS[i] for i in OFFTOPIC_SAMPLE_INDICES]
+
+
+def test_known_miss_ids_all_present_in_the_real_tuning_set():
+    questions = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    assert {c["expected_doc_id"] for c in _known_miss_cases(questions)} == KNOWN_MISS_IDS
+
+
+def test_offtopic_sample_indices_exist_in_the_real_offtopic_set():
+    questions = json.loads(OFFTOPIC_QUESTIONS_PATH.read_text(encoding="utf-8"))
+    assert max(OFFTOPIC_SAMPLE_INDICES) < len(questions)

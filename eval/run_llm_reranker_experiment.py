@@ -41,11 +41,16 @@ async def _run_known_misses(retriever: Retriever, client) -> None:
         query = eval_query(item)
         audience = classify_audience(query)
         docs, gate_open = two_signal_candidates(retriever, query, audience)
-        if not gate_open:
+        if not gate_open or not docs:
             print(f"  GATE ZU (Stufe 1): {item['question']!r}")
             continue
-        ranking, confidence = await llm_two_signal_rerank(query, docs, client)
+        ranking, confidence, used_fallback = await llm_two_signal_rerank(query, docs, client)
         top1_id = docs[ranking[0]].id
+        if used_fallback:
+            print(f"  PARSE-FALLBACK: {item['question']!r} erwartet "
+                  f"{item['expected_doc_id']}, top1 {top1_id} (Fallback-Ranking, "
+                  "keine echte confidence)")
+            continue
         status = "OK" if top1_id == item["expected_doc_id"] else "MISS"
         print(f"  {status}: {item['question']!r} erwartet {item['expected_doc_id']}, "
               f"top1 {top1_id}, confidence {confidence}")
@@ -59,11 +64,15 @@ async def _run_offtopic_sample(retriever: Retriever, client) -> None:
         query = item["question"]
         audience = classify_audience(query)
         docs, gate_open = two_signal_candidates(retriever, query, audience)
-        if not gate_open:
+        if not gate_open or not docs:
             print(f"  GATE ZU (Stufe 1, korrekt): {query!r}")
             continue
-        ranking, confidence = await llm_two_signal_rerank(query, docs, client)
+        ranking, confidence, used_fallback = await llm_two_signal_rerank(query, docs, client)
         top1_id = docs[ranking[0]].id
+        if used_fallback:
+            print(f"  PARSE-FALLBACK: {query!r} -> top1 {top1_id} "
+                  "(Fallback-Ranking, keine echte confidence)")
+            continue
         print(f"  confidence {confidence}: {query!r} -> top1 {top1_id}")
 
 

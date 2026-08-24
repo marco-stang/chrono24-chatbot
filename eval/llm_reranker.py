@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from app.config import settings
-from app.retrieval import RetrievedDoc, _dedupe_ranking, TOP_K_CANDIDATES, Retriever
+from app.retrieval import TOP_K_CANDIDATES, RetrievedDoc, Retriever, _dedupe_ranking
 
 MAX_LLM_RERANK_TOKENS = 400
 
@@ -36,28 +36,40 @@ def build_llm_rerank_prompt(query: str, docs: list[RetrievedDoc]) -> str:
     return f"Frage: {query}\n\nKandidaten:\n{candidates}"
 
 
-def _parse_response(text: str, n: int) -> tuple[list[int], float]:
+def _parse_response(text: str, n: int) -> tuple[list[int], float, bool]:
     """Konservativer Fallback bei jedem Abweichen vom erwarteten Format --
     ein Malformed-Value darf nie zu einem falsch-positiven Treffer fuehren
-    (Spec, Abschnitt Fehlerbehandlung)."""
+    (Spec, Abschnitt Fehlerbehandlung). Dritter Rueckgabewert `used_fallback`:
+    True, wenn ranking und/oder confidence nicht valide geparst werden
+    konnten -- sonst waere eine echte confidence von 0.0 nicht von einem
+    Parse-Fehler zu unterscheiden (siehe run_llm_reranker_experiment.py)."""
     identity = list(range(n))
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, TypeError):
-        return identity, 0.0
+        return identity, 0.0, True
     if not isinstance(data, dict):
-        return identity, 0.0
+        return identity, 0.0, True
 
     ranking = data.get("ranking")
-    if not isinstance(ranking, list) or sorted(ranking) != identity:
+    # bool ist eine int-Subklasse -- ohne den Ausschluss wuerde z.B.
+    # [True, 0] als gueltige Indexliste durchgehen. sorted() faellt bei
+    # gemischten Typen (z.B. [0, "1"]) sonst mit TypeError um, deshalb erst
+    # der Typ-Check, dann erst sorted().
+    is_index_list = isinstance(ranking, list) and all(
+        isinstance(i, int) and not isinstance(i, bool) for i in ranking
+    )
+    ranking_fallback = not is_index_list or sorted(ranking) != identity
+    if ranking_fallback:
         ranking = identity
 
     confidence = data.get("top1_confidence")
     is_plain_number = isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
-    if not is_plain_number or not (0 <= confidence <= 10):
+    confidence_fallback = not is_plain_number or not (0 <= confidence <= 10)
+    if confidence_fallback:
         confidence = 0.0
 
-    return ranking, float(confidence)
+    return ranking, float(confidence), ranking_fallback or confidence_fallback
 
 
 def union_candidates(vector_ranking: list[str], bm25_ranking: list[str]) -> list[str]:
@@ -69,10 +81,13 @@ def union_candidates(vector_ranking: list[str], bm25_ranking: list[str]) -> list
 
 async def llm_two_signal_rerank(
     query: str, docs: list[RetrievedDoc], client
-) -> tuple[list[int], float]:
-    """Gibt (Rangfolge als 0-indexierte Positionsliste, top1_confidence)
-    zurueck. ranking[0] ist der Index des nach Rangfolge bestplatzierten
-    Kandidaten in docs."""
+) -> tuple[list[int], float, bool]:
+    """Gibt (Rangfolge als 0-indexierte Positionsliste, top1_confidence,
+    used_fallback) zurueck. ranking[0] ist der Index des nach Rangfolge
+    bestplatzierten Kandidaten in docs. used_fallback ist True, wenn die
+    Antwort nicht valide geparst werden konnte (siehe _parse_response) --
+    Aufrufer sollten das nicht mit einer echten confidence von 0.0
+    verwechseln."""
     response = await client.messages.create(
         model=settings.model,
         max_tokens=MAX_LLM_RERANK_TOKENS,
@@ -95,6 +110,9 @@ def two_signal_candidates(
     n = min(TOP_K_CANDIDATES, total)
     vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
     bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
+    # Muss mit Stufe 1 des Gates in Retriever.retrieve() (app/retrieval.py)
+    # in Sync bleiben -- Duplikat, weil retrieve() selbst danach RRF-fuse+
+    # cut statt Union macht und daher hier nicht wiederverwendet werden kann.
     if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
         return [], False
     ids = union_candidates(vector_ranking, bm25_ranking)
