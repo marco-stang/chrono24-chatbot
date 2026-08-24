@@ -3,6 +3,7 @@ from eval.llm_reranker import (
     _parse_response,
     _system_prompt,
     build_llm_rerank_prompt,
+    llm_two_signal_rerank,
     union_candidates,
 )
 
@@ -71,3 +72,52 @@ def test_parse_response_falls_back_completely_on_malformed_json():
 def test_union_candidates_dedupes_keeping_first_occurrence():
     result = union_candidates(["a", "b"], ["b", "c"])
     assert result == ["a", "b", "c"]
+
+
+class _FakeTextBlock:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeResponse:
+    def __init__(self, text):
+        self.content = [_FakeTextBlock(text)]
+
+
+class _FakeMessages:
+    def __init__(self, response_text):
+        self._response_text = response_text
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeResponse(self._response_text)
+
+
+class _FakeClient:
+    def __init__(self, response_text):
+        self.messages = _FakeMessages(response_text)
+
+
+async def test_llm_two_signal_rerank_returns_parsed_ranking_and_confidence():
+    client = _FakeClient('{"ranking": [1, 0], "top1_confidence": 9}')
+    ranking, confidence = await llm_two_signal_rerank("Frage?", DOCS, client)
+    assert ranking == [1, 0]
+    assert confidence == 9.0
+
+
+async def test_llm_two_signal_rerank_pins_temperature_and_token_limit():
+    client = _FakeClient('{"ranking": [0, 1], "top1_confidence": 5}')
+    await llm_two_signal_rerank("Frage?", DOCS, client)
+    call = client.messages.calls[0]
+    assert call["temperature"] == 0
+    assert call["max_tokens"] == 400
+
+
+async def test_llm_two_signal_rerank_falls_back_on_malformed_response():
+    client = _FakeClient("kaputte Antwort, kein JSON")
+    ranking, confidence = await llm_two_signal_rerank("Frage?", DOCS, client)
+    assert ranking == [0, 1]
+    assert confidence == 0.0

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 
+from app.config import settings
 from app.retrieval import RetrievedDoc, _dedupe_ranking
 
 MAX_LLM_RERANK_TOKENS = 400
@@ -64,3 +65,20 @@ def union_candidates(vector_ranking: list[str], bm25_ranking: list[str]) -> list
     ohne ihn sieht kein Reranker Kandidaten, die nur in einer der beiden
     Top-10-Listen weit vorn liegen."""
     return _dedupe_ranking(vector_ranking + bm25_ranking)
+
+
+async def llm_two_signal_rerank(
+    query: str, docs: list[RetrievedDoc], client
+) -> tuple[list[int], float]:
+    """Gibt (Rangfolge als 0-indexierte Positionsliste, top1_confidence)
+    zurueck. ranking[0] ist der Index des nach Rangfolge bestplatzierten
+    Kandidaten in docs."""
+    response = await client.messages.create(
+        model=settings.model,
+        max_tokens=MAX_LLM_RERANK_TOKENS,
+        system=_system_prompt(len(docs)),
+        temperature=0,
+        messages=[{"role": "user", "content": build_llm_rerank_prompt(query, docs)}],
+    )
+    text = next((b.text for b in response.content if b.type == "text"), "").strip()
+    return _parse_response(text, len(docs))
