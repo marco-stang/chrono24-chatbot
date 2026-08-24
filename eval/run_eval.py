@@ -47,11 +47,12 @@ def eval_query(item: dict) -> str:
     return item.get("rewritten") or item["question"]
 
 
-def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, list[dict]]:
+async def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, list[dict]]:
     misses = []
     hits = 0
     for item in questions:
-        ids = [d.id for d in retriever.retrieve(eval_query(item), top_k=k)]
+        docs, _ = await retriever.retrieve(eval_query(item), top_k=k)
+        ids = [d.id for d in docs]
         if item["expected_doc_id"] in ids:
             hits += 1
         else:
@@ -59,8 +60,8 @@ def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, 
     return hits / len(questions), misses
 
 
-def hit_rate_at_k_with_audience(
-    retriever, questions: list[dict], k: int = 5
+async def hit_rate_at_k_with_audience(
+    retriever, questions: list[dict], k: int = 5, client=None
 ) -> tuple[float, list[dict]]:
     """Wie hit_rate_at_k, wendet aber vorher den harten audience-Filter aus
     Retriever.retrieve() an (Schritt 1, corpus-storage-rethink-design.md) --
@@ -79,7 +80,8 @@ def hit_rate_at_k_with_audience(
     for item in questions:
         query = eval_query(item)
         audience = classify_audience(query)
-        ids = [d.id for d in retriever.retrieve(query, top_k=k, audience=audience)]
+        docs, _ = await retriever.retrieve(query, top_k=k, audience=audience, client=client)
+        ids = [d.id for d in docs]
         if item["expected_doc_id"] in ids:
             hits += 1
         else:
@@ -87,7 +89,7 @@ def hit_rate_at_k_with_audience(
     return hits / len(questions), misses
 
 
-def abstention_rate(retriever, questions: list[dict]) -> tuple[float, list[dict]]:
+async def abstention_rate(retriever, questions: list[dict], client=None) -> tuple[float, list[dict]]:
     """Anteil themenfremder Fragen, bei denen retrieve() korrekt leer zurückgibt.
 
     questions enthält kein expected_doc_id — der erwartete Fall ist gerade
@@ -98,7 +100,7 @@ def abstention_rate(retriever, questions: list[dict]) -> tuple[float, list[dict]
     false_hits = []
     abstained = 0
     for item in questions:
-        docs = retriever.retrieve(item["question"])
+        docs, _ = await retriever.retrieve(item["question"], client=client)
         if not docs:
             abstained += 1
         else:
@@ -146,45 +148,52 @@ def check_gate(tuning_rate: float, holdout_rate: float, abstention_rate_value: f
     return failures
 
 
-if __name__ == "__main__":
-    import sys
+async def _run_gate(retriever, client) -> int:
+    tuning = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    holdout = json.loads(HOLDOUT_QUESTIONS_PATH.read_text(encoding="utf-8"))
+    offtopic = json.loads(OFFTOPIC_QUESTIONS_PATH.read_text(encoding="utf-8"))
+    tuning_rate, tuning_misses = await hit_rate_at_k_with_audience(retriever, tuning, client=client)
+    holdout_rate, _ = await hit_rate_at_k_with_audience(retriever, holdout, client=client)
+    abstain_rate, false_hits = await abstention_rate(retriever, offtopic, client=client)
+    print(f"Tuning-Hit-Rate@5:  {format_rate(round(tuning_rate * len(tuning)), len(tuning))}")
+    print(f"Holdout-Hit-Rate@5: {format_rate(round(holdout_rate * len(holdout)), len(holdout))}")
+    print(f"Abstention-Rate:    {format_rate(len(offtopic) - len(false_hits), len(offtopic))}")
+    for miss in tuning_misses:
+        print(f"  TUNING MISS ({miss['audience']}): {miss['question']!r} erwartet "
+              f"{miss['expected_doc_id']}, bekam {miss['got']}")
+    for false_hit in false_hits:
+        print(f"  FALSE HIT: {false_hit['question']!r} -> "
+              f"{false_hit['got_id']} ({false_hit['got_title']!r})")
+    failures = check_gate(tuning_rate, holdout_rate, abstain_rate)
+    for failure in failures:
+        print(f"GATE FAIL: {failure}")
+    return 1 if failures else 0
 
-    from app.config import settings
-    from app.retrieval import Retriever
 
-    retriever = Retriever(settings.index_dir, settings.corpus_path)
-
-    if "--gate" in sys.argv:
-        tuning = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
-        holdout = json.loads(HOLDOUT_QUESTIONS_PATH.read_text(encoding="utf-8"))
-        offtopic = json.loads(OFFTOPIC_QUESTIONS_PATH.read_text(encoding="utf-8"))
-        # Misst den harten audience-Filter mit (Schritt 1,
-        # corpus-storage-rethink-design.md) -- abstention_rate bleibt bewusst
-        # ohne Klassifikation, off-topic-Fragen haben keine Rolle.
-        tuning_rate, tuning_misses = hit_rate_at_k_with_audience(retriever, tuning)
-        holdout_rate, _ = hit_rate_at_k_with_audience(retriever, holdout)
-        abstain_rate, false_hits = abstention_rate(retriever, offtopic)
-        # Punktzahl plus 95-%-Intervall: bei 14 bis 33 Fragen sagt die Zahl
-        # allein zu wenig, und ohne die Spanne daneben wird ueber Unterschiede
-        # gestritten, die vollstaendig im Rauschen liegen.
-        print(f"Tuning-Hit-Rate@5:  {format_rate(round(tuning_rate * len(tuning)), len(tuning))}")
-        print(f"Holdout-Hit-Rate@5: {format_rate(round(holdout_rate * len(holdout)), len(holdout))}")
-        print(f"Abstention-Rate:    {format_rate(len(offtopic) - len(false_hits), len(offtopic))}")
-        for miss in tuning_misses:
-            print(f"  TUNING MISS ({miss['audience']}): {miss['question']!r} erwartet "
-                  f"{miss['expected_doc_id']}, bekam {miss['got']}")
-        for false_hit in false_hits:
-            print(f"  FALSE HIT: {false_hit['question']!r} -> "
-                  f"{false_hit['got_id']} ({false_hit['got_title']!r})")
-        failures = check_gate(tuning_rate, holdout_rate, abstain_rate)
-        for failure in failures:
-            print(f"GATE FAIL: {failure}")
-        sys.exit(1 if failures else 0)
-
-    questions = json.loads(_questions_path(sys.argv).read_text(encoding="utf-8"))
-    if "--with-rewrite" in sys.argv:
+async def _run_plain(retriever, argv: list[str]) -> None:
+    questions = json.loads(_questions_path(argv).read_text(encoding="utf-8"))
+    if "--with-rewrite" in argv:
         questions = _rewrite_questions(questions)
-    rate, misses = hit_rate_at_k(retriever, questions)
+    rate, misses = await hit_rate_at_k(retriever, questions)
     print(f"Hit-Rate@5: {format_rate(len(questions) - len(misses), len(questions))}")
     for miss in misses:
         print(f"  MISS: {miss['question']!r} erwartet {miss['expected_doc_id']}, bekam {miss['got']}")
+
+
+if __name__ == "__main__":
+    import asyncio
+    import sys
+
+    from app.config import settings
+    from app.llm import get_client
+    from app.retrieval import Retriever
+
+    async def _main() -> int:
+        retriever = Retriever(settings.index_dir, settings.corpus_path)
+        client = get_client() if settings.use_llm_reranker else None
+        if "--gate" in sys.argv:
+            return await _run_gate(retriever, client)
+        await _run_plain(retriever, sys.argv)
+        return 0
+
+    sys.exit(asyncio.run(_main()))
