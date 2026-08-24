@@ -47,11 +47,11 @@ def eval_query(item: dict) -> str:
     return item.get("rewritten") or item["question"]
 
 
-async def hit_rate_at_k(retriever, questions: list[dict], k: int = 5) -> tuple[float, list[dict]]:
+async def hit_rate_at_k(retriever, questions: list[dict], k: int = 5, client=None) -> tuple[float, list[dict]]:
     misses = []
     hits = 0
     for item in questions:
-        docs, _ = await retriever.retrieve(eval_query(item), top_k=k)
+        docs, _ = await retriever.retrieve(eval_query(item), top_k=k, client=client)
         ids = [d.id for d in docs]
         if item["expected_doc_id"] in ids:
             hits += 1
@@ -108,26 +108,21 @@ async def abstention_rate(retriever, questions: list[dict], client=None) -> tupl
     return abstained / len(questions), false_hits
 
 
-def _rewrite_questions(questions: list[dict]) -> list[dict]:
+async def _rewrite_questions(questions: list[dict]) -> list[dict]:
     """Nicht-deutsche Fragen per Haiku umformulieren — wie im Live-Pfad (kostet API-Cents)."""
-    import asyncio
-
     from app.llm import get_client, rewrite_query
     from app.textproc import looks_german
 
-    async def rewrite_all() -> list[dict]:
-        client = get_client()
-        rewritten = []
-        for item in questions:
-            if looks_german(item["question"]):
-                rewritten.append(item)
-                continue
-            new_question, _ = await rewrite_query([], item["question"], client)
-            print(f"  umformuliert: {item['question']!r} -> {new_question!r}")
-            rewritten.append({**item, "question": new_question})
-        return rewritten
-
-    return asyncio.run(rewrite_all())
+    client = get_client()
+    rewritten = []
+    for item in questions:
+        if looks_german(item["question"]):
+            rewritten.append(item)
+            continue
+        new_question, _ = await rewrite_query([], item["question"], client)
+        print(f"  umformuliert: {item['question']!r} -> {new_question!r}")
+        rewritten.append({**item, "question": new_question})
+    return rewritten
 
 
 def check_gate(tuning_rate: float, holdout_rate: float, abstention_rate_value: float) -> list[str]:
@@ -170,11 +165,11 @@ async def _run_gate(retriever, client) -> int:
     return 1 if failures else 0
 
 
-async def _run_plain(retriever, argv: list[str]) -> None:
+async def _run_plain(retriever, argv: list[str], client) -> None:
     questions = json.loads(_questions_path(argv).read_text(encoding="utf-8"))
     if "--with-rewrite" in argv:
-        questions = _rewrite_questions(questions)
-    rate, misses = await hit_rate_at_k(retriever, questions)
+        questions = await _rewrite_questions(questions)
+    rate, misses = await hit_rate_at_k(retriever, questions, client=client)
     print(f"Hit-Rate@5: {format_rate(len(questions) - len(misses), len(questions))}")
     for miss in misses:
         print(f"  MISS: {miss['question']!r} erwartet {miss['expected_doc_id']}, bekam {miss['got']}")
@@ -193,7 +188,7 @@ if __name__ == "__main__":
         client = get_client() if settings.use_llm_reranker else None
         if "--gate" in sys.argv:
             return await _run_gate(retriever, client)
-        await _run_plain(retriever, sys.argv)
+        await _run_plain(retriever, sys.argv, client)
         return 0
 
     sys.exit(asyncio.run(_main()))

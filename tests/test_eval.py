@@ -85,3 +85,27 @@ async def test_hit_rate_falls_back_to_question_without_rewrite():
     questions = [{"question": "Was kostet der Verkauf?", "expected_doc_id": "faq-0098"}]
     rate, _ = await hit_rate_at_k(retriever, questions, k=5)
     assert rate == 1.0
+
+
+async def test_hit_rate_at_k_passes_client_through():
+    """Regression: hit_rate_at_k muss den client-Parameter an retrieve() durchreichen,
+    damit der LLM-Reranker im Live-Betrieb nicht mit client=None abstürzt."""
+    class ClientTrackingRetriever:
+        def __init__(self):
+            self.retrieved_with_clients = []
+
+        async def retrieve(self, query, top_k=5, audience=None, client=None):
+            self.retrieved_with_clients.append(client)
+            return [RetrievedDoc(id="faq-0001", type="faq", title="Titel", url="u", text="x", score=0.1)], 0
+
+    retriever = ClientTrackingRetriever()
+    questions = [{"question": "Test", "expected_doc_id": "faq-0001"}]
+
+    # Ohne client
+    await hit_rate_at_k(retriever, questions)
+    assert retriever.retrieved_with_clients[-1] is None
+
+    # Mit client (simuliert: ein String-Objekt, nicht ein echter LLM-Client)
+    mock_client = object()
+    await hit_rate_at_k(retriever, questions, client=mock_client)
+    assert retriever.retrieved_with_clients[-1] is mock_client
