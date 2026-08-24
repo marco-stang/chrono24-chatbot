@@ -129,6 +129,51 @@ def test_parse_response_used_fallback_distinguishes_parse_failure_from_genuine_l
     assert genuine_ranking != broken_ranking or genuine_fallback != broken_fallback
 
 
+def test_parse_response_strips_json_code_fence():
+    """Verifies that markdown code fence ```json\n...\n``` is stripped."""
+    fenced_json = '```json\n{"ranking": [1, 0], "top1_confidence": 9}\n```'
+    ranking, confidence, used_fallback = _parse_response(fenced_json, n=2)
+    assert ranking == [1, 0]
+    assert confidence == 9.0
+    assert used_fallback is False
+
+
+def test_parse_response_strips_code_fence_without_language_tag():
+    """Verifies that plain code fence ```\n...\n``` (without json tag) is stripped."""
+    fenced_json = '```\n{"ranking": [1, 0], "top1_confidence": 8}\n```'
+    ranking, confidence, used_fallback = _parse_response(fenced_json, n=2)
+    assert ranking == [1, 0]
+    assert confidence == 8.0
+    assert used_fallback is False
+
+
+def test_parse_response_strips_fence_with_leading_trailing_whitespace():
+    """Verifies that whitespace around fence markers is handled correctly."""
+    fenced_json = '  ```json\n{"ranking": [1, 0], "top1_confidence": 7}\n```  '
+    ranking, confidence, used_fallback = _parse_response(fenced_json, n=2)
+    assert ranking == [1, 0]
+    assert confidence == 7.0
+    assert used_fallback is False
+
+
+def test_parse_response_unfenced_json_still_works():
+    """Verifies that plain JSON without code fence is still parsed correctly."""
+    plain_json = '{"ranking": [1, 0], "top1_confidence": 6}'
+    ranking, confidence, used_fallback = _parse_response(plain_json, n=2)
+    assert ranking == [1, 0]
+    assert confidence == 6.0
+    assert used_fallback is False
+
+
+def test_parse_response_malformed_text_still_falls_back():
+    """Verifies that genuinely malformed text (fenced or not) still falls back."""
+    malformed = '```json\nnot valid json at all\n```'
+    ranking, confidence, used_fallback = _parse_response(malformed, n=2)
+    assert ranking == [0, 1]
+    assert confidence == 0.0
+    assert used_fallback is True
+
+
 def test_union_candidates_dedupes_keeping_first_occurrence():
     result = union_candidates(["a", "b"], ["b", "c"])
     assert result == ["a", "b", "c"]

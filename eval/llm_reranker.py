@@ -5,11 +5,24 @@ app/retrieval.py bleibt unveraendert, solange nur gemessen wird."""
 from __future__ import annotations
 
 import json
+import re
 
 from app.config import settings
 from app.retrieval import TOP_K_CANDIDATES, RetrievedDoc, Retriever, _dedupe_ranking
 
 MAX_LLM_RERANK_TOKENS = 400
+
+_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
+
+
+def _strip_code_fence(text: str) -> str:
+    """Strips markdown code fence (```json or ```) from LLM response if present.
+
+    Handles variants: ```json\n{...}\n``` and ```\n{...}\n```
+    If no fence is present, returns the text unchanged.
+    """
+    match = _FENCE_RE.match(text.strip())
+    return match.group(1) if match else text
 
 
 def _system_prompt(n: int) -> str:
@@ -45,7 +58,8 @@ def _parse_response(text: str, n: int) -> tuple[list[int], float, bool]:
     Parse-Fehler zu unterscheiden (siehe run_llm_reranker_experiment.py)."""
     identity = list(range(n))
     try:
-        data = json.loads(text)
+        stripped_text = _strip_code_fence(text)
+        data = json.loads(stripped_text)
     except (json.JSONDecodeError, TypeError):
         return identity, 0.0, True
     if not isinstance(data, dict):
