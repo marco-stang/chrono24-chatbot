@@ -221,6 +221,40 @@ Tagesbudget-Neukalkulation) — bewusst außerhalb dieses Experiments.
 
 ---
 
+## Integration abgeschlossen (2026-08-24)
+
+Ersatz umgesetzt nach `docs/superpowers/specs/2026-08-24-llm-reranker-integration-design.md`
+(10 Tasks, Subagent-Driven Development, jeder Task einzeln reviewt, ein
+finaler Whole-Branch-Review mit 1 Critical + 5 Important + 4 Minor Findings,
+alle gefixt und re-reviewt). `app/retrieval.py::Retriever.retrieve()` ist
+jetzt `async def` und läuft standardmäßig (`settings.use_llm_reranker =
+True`) über den Zwei-Signal-LLM-Reranker. Rollback ohne Deploy:
+`USE_LLM_RERANKER=false` setzen und neu starten — der Cross-Encoder-Pfad
+bleibt vollständig erhalten und wird dann geladen.
+
+**Echter End-to-End-Smoke-Test** (`python -m eval.run_eval --gate`, über
+den tatsächlichen Produktionspfad, nicht mehr über die Experiment-Skripte):
+
+| Metrik | Ergebnis |
+|---|---|
+| Tuning-Hit-Rate@5 | 100 % (33/33) |
+| Holdout-Hit-Rate@5 | 100 % (15/15) |
+| Abstention-Rate | 93 % (13/14) |
+
+Exakt dieselben Zahlen wie in Stufe 2 gemessen — derselbe False Hit
+(Omega-Bewertungsfrage → `info-valuation-0006`). Die Integration verhält
+sich also nachweislich identisch zum isolierten Experiment, kein
+Verhaltensunterschied durch die Produktionsverdrahtung.
+
+209 Tests grün, `ruff check .` sauber. CI-Gate (`eval-gate`-Job) testet ab
+jetzt denselben Pfad, kostet also ab dem nächsten Push echte API-Calls
+(bisher kostenlos). Gate-Schwellen (`MIN_ABSTENTION_RATE` etc. in
+`eval/run_eval.py`) sind noch auf den alten Cross-Encoder-Werten
+kalibriert — als offener Punkt in den Kommentaren dort vermerkt, nicht
+mehr in diesem Handover wiederholt.
+
+---
+
 ## Integrationsentscheidung: drei Kaskaden-Heuristiken widerlegt (2026-08-24)
 
 Vor der Ersatz/Kaskade-Entscheidung wurde der Omega-„False Hit" aus Stufe 1/2
