@@ -30,6 +30,27 @@ live für Nutzer der Demo.
 - **`Retriever.retrieve()` wird `async def`.** Ein Retrieval-Pfad statt
   zwei parallelen Implementierungen. Alle Aufrufer (Produktion, Eval-
   Skripte, Tests) werden entsprechend migriert.
+- **`eval/llm_reranker.py` wandert nach `app/llm_reranker.py`.** Grund:
+  `app/retrieval.py` muss `llm_two_signal_rerank`/`union_candidates`
+  importieren können — `app` darf aber nicht von `eval` abhängen (falsche
+  Abhängigkeitsrichtung). Die `Retriever`-verzehrende Wrapper-Funktion
+  `two_signal_candidates` entfällt dabei: ihre Logik (Union-Kandidaten
+  bauen) wandert direkt in `Retriever.retrieve()`, das ohnehin schon
+  Zugriff auf `self._vector_candidates`/`self._bm25_candidates` hat.
+  Verbleibender zirkulärer Import (`app.llm_reranker` bräuchte
+  `RetrievedDoc` aus `app.retrieval` für Typannotationen, `app.retrieval`
+  importiert umgekehrt `llm_two_signal_rerank`/`union_candidates` aus
+  `app.llm_reranker`) wird mit einem `TYPE_CHECKING`-Guard aufgelöst
+  (Codebase nutzt bereits überall `from __future__ import annotations`,
+  Typannotationen werden also ohnehin nie zur Laufzeit ausgewertet):
+  ```python
+  from __future__ import annotations
+  from typing import TYPE_CHECKING
+  if TYPE_CHECKING:
+      from app.retrieval import RetrievedDoc
+  ```
+  Alle bisherigen Nutzer von `eval/llm_reranker.py` (Stufe-1/2-Skripte und
+  ihre Tests) importieren künftig von `app.llm_reranker`.
 - **Tagesbudget bleibt bei 200.000**, trotz gemessener ~74 % geringerer
   Kapazität (siehe unten) — Portfolio-Demo ohne Umsatzdruck, Rate-Limit
   (50/Tag/IP) war ohnehin der engere Deckel pro Nutzer.
@@ -62,9 +83,9 @@ bleiben.
 Verzweigung nach `self.use_llm_reranker`:
 
 - **`True` (Standard):** Kandidatenmenge per Union-Fix
-  (`_vector_candidates` + `_bm25_candidates`, vereinigt statt RRF-Top-n-
-  Cut — Logik aus `eval/llm_reranker.py::two_signal_candidates` wandert
-  hierher bzw. wird von hier wiederverwendet). Reranking per
+  (`self._vector_candidates` + `self._bm25_candidates`, vereinigt via
+  `union_candidates()` statt RRF-Top-n-Cut — direkt in `retrieve()`, siehe
+  Punkt zur Modul-Verschiebung oben). Reranking per
   `llm_two_signal_rerank(query, docs, client)`. Gate: `top1_confidence <
   LLM_CONFIDENCE_THRESHOLD` (neue Konstante, Wert `8.5`, siehe Stufe-2-
   Messung im Handover) → leer zurückgeben. `used_fallback=True` wird wie
@@ -81,7 +102,8 @@ Bestehende Test-Konstruktion mit explizitem `reranker=`-Argument bleibt
 unverändert funktionsfähig (Override sticht immer, unabhängig von
 `use_llm_reranker`).
 
-`llm_two_signal_rerank` in `eval/llm_reranker.py` gibt künftig ein
+`llm_two_signal_rerank` in `app/llm_reranker.py` (nach der Verschiebung,
+siehe oben) gibt künftig ein
 4-Tupel zurück: `(ranking, confidence, used_fallback, tokens)` —
 `tokens = response.usage.input_tokens + response.usage.output_tokens`,
 analog zu `app/llm.py::rewrite_query`.
