@@ -1,14 +1,16 @@
-"""Zwei-Signal-LLM-Reranker (Rangfolge + top1_confidence) -- Experiment,
-noch nicht integriert. Siehe
-docs/superpowers/specs/2026-08-24-two-signal-reranker-design.md.
-app/retrieval.py bleibt unveraendert, solange nur gemessen wird."""
+"""Zwei-Signal-LLM-Reranker (Rangfolge + top1_confidence) fuer
+Retriever.retrieve(). Siehe
+docs/superpowers/specs/2026-08-24-llm-reranker-integration-design.md."""
 from __future__ import annotations
 
 import json
 import re
+from typing import TYPE_CHECKING
 
 from app.config import settings
-from app.retrieval import TOP_K_CANDIDATES, RetrievedDoc, Retriever, _dedupe_ranking
+
+if TYPE_CHECKING:
+    from app.retrieval import RetrievedDoc
 
 MAX_LLM_RERANK_TOKENS = 400
 
@@ -51,11 +53,11 @@ def build_llm_rerank_prompt(query: str, docs: list[RetrievedDoc]) -> str:
 
 def _parse_response(text: str, n: int) -> tuple[list[int], float, bool]:
     """Konservativer Fallback bei jedem Abweichen vom erwarteten Format --
-    ein Malformed-Value darf nie zu einem falsch-positiven Treffer fuehren
-    (Spec, Abschnitt Fehlerbehandlung). Dritter Rueckgabewert `used_fallback`:
-    True, wenn ranking und/oder confidence nicht valide geparst werden
-    konnten -- sonst waere eine echte confidence von 0.0 nicht von einem
-    Parse-Fehler zu unterscheiden (siehe run_llm_reranker_experiment.py)."""
+    ein Malformed-Value darf nie zu einem falsch-positiven Treffer fuehren.
+    Dritter Rueckgabewert `used_fallback`: True, wenn ranking und/oder
+    confidence nicht valide geparst werden konnten -- sonst waere eine
+    echte confidence von 0.0 nicht von einem Parse-Fehler zu
+    unterscheiden."""
     identity = list(range(n))
     try:
         stripped_text = _strip_code_fence(text)
@@ -87,21 +89,31 @@ def _parse_response(text: str, n: int) -> tuple[list[int], float, bool]:
 
 
 def union_candidates(vector_ranking: list[str], bm25_ranking: list[str]) -> list[str]:
-    """Vereinigung statt RRF-Top-n-Cut -- Kandidaten-Union-Fix aus der Spec:
-    ohne ihn sieht kein Reranker Kandidaten, die nur in einer der beiden
-    Top-10-Listen weit vorn liegen."""
-    return _dedupe_ranking(vector_ranking + bm25_ranking)
+    """Vereinigung statt RRF-Top-n-Cut -- Kandidaten-Union-Fix: ohne ihn
+    sieht kein Reranker Kandidaten, die nur in einer der beiden Top-10-
+    Listen weit vorn liegen. Dedupe hier inline statt ueber
+    app.retrieval._dedupe_ranking importiert, damit dieses Modul zur
+    Laufzeit nichts aus app.retrieval braucht (zirkulaerer Import, siehe
+    Spec: app.retrieval importiert umgekehrt aus diesem Modul)."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for doc_id in vector_ranking + bm25_ranking:
+        if doc_id not in seen:
+            seen.add(doc_id)
+            result.append(doc_id)
+    return result
 
 
 async def llm_two_signal_rerank(
     query: str, docs: list[RetrievedDoc], client
-) -> tuple[list[int], float, bool]:
+) -> tuple[list[int], float, bool, int]:
     """Gibt (Rangfolge als 0-indexierte Positionsliste, top1_confidence,
-    used_fallback) zurueck. ranking[0] ist der Index des nach Rangfolge
-    bestplatzierten Kandidaten in docs. used_fallback ist True, wenn die
-    Antwort nicht valide geparst werden konnte (siehe _parse_response) --
-    Aufrufer sollten das nicht mit einer echten confidence von 0.0
-    verwechseln."""
+    used_fallback, tokens) zurueck. ranking[0] ist der Index des nach
+    Rangfolge bestplatzierten Kandidaten in docs. used_fallback ist True,
+    wenn die Antwort nicht valide geparst werden konnte (siehe
+    _parse_response) -- Aufrufer sollten das nicht mit einer echten
+    confidence von 0.0 verwechseln. tokens = verbrauchte Input- + Output-
+    Tokens, fuers Tagesbudget-Tracking."""
     response = await client.messages.create(
         model=settings.model,
         max_tokens=MAX_LLM_RERANK_TOKENS,
@@ -110,25 +122,6 @@ async def llm_two_signal_rerank(
         messages=[{"role": "user", "content": build_llm_rerank_prompt(query, docs)}],
     )
     text = next((b.text for b in response.content if b.type == "text"), "").strip()
-    return _parse_response(text, len(docs))
-
-
-def two_signal_candidates(
-    retriever: Retriever, query: str, audience: str | None
-) -> tuple[list[RetrievedDoc], bool]:
-    """Baut die Kandidatenmenge wie Retriever.retrieve(), aber als
-    Vereinigung statt RRF-Top-n-Cut (Kandidaten-Union-Fix, siehe Spec).
-    Zweiter Rueckgabewert: ob Stufe 1 des bestehenden Gates (sim/bm25-
-    Schwelle) ueberhaupt Kandidaten durchlaesst."""
-    total = retriever.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
-    n = min(TOP_K_CANDIDATES, total)
-    vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
-    bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
-    # Muss mit Stufe 1 des Gates in Retriever.retrieve() (app/retrieval.py)
-    # in Sync bleiben -- Duplikat, weil retrieve() selbst danach RRF-fuse+
-    # cut statt Union macht und daher hier nicht wiederverwendet werden kann.
-    if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
-        return [], False
-    ids = union_candidates(vector_ranking, bm25_ranking)
-    docs = [retriever._to_doc(doc_id, 0.0) for doc_id in ids]
-    return docs, True
+    ranking, confidence, used_fallback = _parse_response(text, len(docs))
+    tokens = response.usage.input_tokens + response.usage.output_tokens
+    return ranking, confidence, used_fallback, tokens

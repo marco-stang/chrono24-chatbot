@@ -1,15 +1,11 @@
-import json
-
-from app.retrieval import RetrievedDoc, Retriever
-from eval.llm_reranker import (
+from app.llm_reranker import (
     _parse_response,
     _system_prompt,
     build_llm_rerank_prompt,
     llm_two_signal_rerank,
-    two_signal_candidates,
     union_candidates,
 )
-from pipeline.index import build_index
+from app.retrieval import RetrievedDoc
 
 DOCS = [
     RetrievedDoc(id="faq-0001", type="faq", title="Frage A",
@@ -186,9 +182,15 @@ class _FakeTextBlock:
         self.text = text
 
 
+class _FakeUsage:
+    input_tokens = 80
+    output_tokens = 15
+
+
 class _FakeResponse:
     def __init__(self, text):
         self.content = [_FakeTextBlock(text)]
+        self.usage = _FakeUsage()
 
 
 class _FakeMessages:
@@ -208,10 +210,11 @@ class _FakeClient:
 
 async def test_llm_two_signal_rerank_returns_parsed_ranking_and_confidence():
     client = _FakeClient('{"ranking": [1, 0], "top1_confidence": 9}')
-    ranking, confidence, used_fallback = await llm_two_signal_rerank("Frage?", DOCS, client)
+    ranking, confidence, used_fallback, tokens = await llm_two_signal_rerank("Frage?", DOCS, client)
     assert ranking == [1, 0]
     assert confidence == 9.0
     assert used_fallback is False
+    assert tokens == 95  # _FakeUsage: input_tokens=80, output_tokens=15
 
 
 async def test_llm_two_signal_rerank_pins_temperature_and_token_limit():
@@ -225,85 +228,8 @@ async def test_llm_two_signal_rerank_pins_temperature_and_token_limit():
 
 async def test_llm_two_signal_rerank_falls_back_on_malformed_response():
     client = _FakeClient("kaputte Antwort, kein JSON")
-    ranking, confidence, used_fallback = await llm_two_signal_rerank("Frage?", DOCS, client)
+    ranking, confidence, used_fallback, tokens = await llm_two_signal_rerank("Frage?", DOCS, client)
     assert ranking == [0, 1]
     assert confidence == 0.0
     assert used_fallback is True
-
-
-_CORPUS_DOCS = [
-    {"id": "faq-0001", "type": "faq", "question": "Wie funktioniert der Käuferschutz?",
-     "answer": "Der Käuferschutz sichert deine Zahlung ab.", "category": "Kaufen",
-     "url": "https://www.chrono24.de/info/faqs.htm"},
-    {"id": "faq-0002", "type": "faq", "question": "Wie verkaufe ich eine Uhr?",
-     "answer": "Über ein Verkäuferkonto.", "category": "Verkaufen",
-     "url": "https://www.chrono24.de/info/faqs.htm"},
-    {"id": "info-shipping-0001", "type": "page_chunk", "title": "Versand",
-     "heading": "Versicherter Versand", "text": "Uhren werden versichert verschickt.",
-     "url": "https://www.chrono24.de/info/shipping.htm"},
-]
-
-_DOC_VECS = {"Käuferschutz": [1.0, 0.0, 0.0], "verkaufe": [0.0, 1.0, 0.0],
-             "Versand": [0.0, 0.0, 1.0]}
-
-
-def _encode_one(text):
-    for key, vec in _DOC_VECS.items():
-        if key in text:
-            return vec
-    return [-1.0, 0.0, 0.0]
-
-
-def _build_retriever(tmp_path):
-    corpus_path = tmp_path / "corpus.json"
-    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": _CORPUS_DOCS}),
-                           encoding="utf-8")
-    index_dir = tmp_path / "index"
-    build_index(corpus_path, index_dir, encoder=lambda texts: [_encode_one(t) for t in texts])
-    return Retriever(index_dir, corpus_path, encoder=_encode_one, reranker=False,
-                     bm25_threshold=1.0)
-
-
-def test_two_signal_candidates_returns_union_when_gate_open(tmp_path):
-    retriever = _build_retriever(tmp_path)
-    docs, gate_open = two_signal_candidates(retriever, "Wie funktioniert der Käuferschutz?", None)
-    assert gate_open is True
-    assert {d.id for d in docs} == {"faq-0001", "faq-0002", "info-shipping-0001"}
-
-
-def test_two_signal_candidates_closes_gate_for_offtopic(tmp_path):
-    retriever = _build_retriever(tmp_path)
-    docs, gate_open = two_signal_candidates(retriever, "Gedicht über Katzen bitte", None)
-    assert gate_open is False
-    assert docs == []
-
-
-def test_two_signal_candidates_union_vs_rrf_cut(tmp_path, monkeypatch):
-    """Verify union (not RRF-top-n-cut) with divergent vector/bm25 rankings.
-
-    The fix: union_candidates([vector_top_2], [bm25_top_2]) yields 3 docs
-    when rankings diverge, while naive RRF-fuse-then-cut-to-2 would yield only 2.
-    _vector_candidates/_bm25_candidates are mocked directly (both ignore `n`),
-    so TOP_K_CANDIDATES is irrelevant here -- only the divergent rankings matter.
-    """
-    retriever = _build_retriever(tmp_path)
-
-    # Mock rankings to have a split: vector=[A, B], bm25=[A, C]
-    # This forces union=[A, B, C] but RRF-top-2-cut=[A, ...one of B/C]
-    def mock_vector_candidates(query, n, total, audience):
-        return (["faq-0001", "faq-0002"], 0.9)  # Top 2: faq-0001, faq-0002
-
-    def mock_bm25_candidates(query, n, audience):
-        return (["faq-0001", "info-shipping-0001"], 6.0)  # Top 2: faq-0001, info-shipping-0001
-
-    monkeypatch.setattr(retriever, "_vector_candidates", mock_vector_candidates)
-    monkeypatch.setattr(retriever, "_bm25_candidates", mock_bm25_candidates)
-
-    docs, gate_open = two_signal_candidates(retriever, "test query", None)
-
-    assert gate_open is True
-    # Union of [faq-0001, faq-0002] + [faq-0001, info-shipping-0001]
-    # should yield [faq-0001, faq-0002, info-shipping-0001] (3 docs)
-    # If implementation used RRF-fuse-then-cut-to-2, it would return only 2.
-    assert len(docs) == 3
-    assert {d.id for d in docs} == {"faq-0001", "faq-0002", "info-shipping-0001"}
+    assert tokens == 95
