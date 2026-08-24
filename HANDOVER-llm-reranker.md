@@ -221,6 +221,50 @@ Tagesbudget-Neukalkulation) — bewusst außerhalb dieses Experiments.
 
 ---
 
+## Integrationsentscheidung: drei Kaskaden-Heuristiken widerlegt (2026-08-24)
+
+Vor der Ersatz/Kaskade-Entscheidung wurde der Omega-„False Hit" aus Stufe 1/2
+genauer untersucht — mit dem echten produktiven Cross-Encoder (`HF_TOKEN`
+lokal gesetzt, nicht in `.env`, siehe unten).
+
+**Korrektur einer Fehlannahme:** Der produktive Pfad (RRF-Cut + Cross-Encoder)
+liefert für die Omega-Frage bereits **leer** — abstiniert korrekt. Das
+Off-Topic-Label war richtig, kein Eval-Fehler. Der Fehlalarm entsteht
+ausschließlich durch die Kombination aus Kandidaten-Union-Fix (holt den
+Kandidaten zurück, den RRF-Cut ausschließt) und der LLM-Konfidenz — mit dem
+Cross-Encoder allein auf denselben Union-Kandidaten bleibt der Top-Score
+(2.38) unter `RERANK_THRESHOLD` (2.9), korrekt abstinierend.
+
+Drei Ideen für eine Kaskade (Cross-Encoder zuerst, LLM nur bei Bedarf)
+wurden mit echten Cross-Encoder-Scores auf den vier Dauer-Missen plus dem
+Omega-Fall geprüft — alle drei scheitern:
+
+| Heuristik | Befund |
+|---|---|
+| LLM-Konfidenz gegen Cross-Encoder-Score deckeln | Zwei der vier echten Misses (faq-0098: -5.04, info-escrow-0007: -7.76) liegen im selben tief-negativen Bereich wie der Fehlalarm (-6.85) — ein Floor, der den Fehlalarm ausschließt, killt auch die echten Treffer. |
+| Eskalieren bei Cross-Encoder-Score < Schwelle | Der Cross-Encoder ist bei 3 von 4 Missen nicht unsicher, sondern **selbstbewusst falsch** (Scores 8.97 / 9.90 / 4.28, alle über der Schwelle 2.9, aber falsches Geschwister-Dokument) — die Eskalationsregel würde nie feuern. |
+| Eskalieren bei kleinem Score-Abstand Top1↔Top2 | Kleinster Gap (0.09–0.13) kommt sowohl beim einzigen selbst gelösten Fall (faq-0162, richtig) als auch beim schlimmsten Miss (faq-0033, falsch) vor — keine Trennung. |
+| Nur übernehmen bei LLM/Cross-Encoder-Einigkeit | Cross-Encoder und LLM sind sich bei 3 von 4 echten Rettungen *nicht* einig — per Definition, weil genau das die Fälle sind, wo der Cross-Encoder falsch liegt. Die Regel würfe fast den gesamten Nutzen des LLM-Rerankers weg, um den einen Fehlalarm zu vermeiden. |
+
+**Fazit:** Mit Cross-Encoder-Signalen allein (Score-Höhe, Score-Abstand,
+Übereinstimmung mit dem LLM) lässt sich keine verlässliche Eskalationsregel
+für eine Kaskade bauen — der Cross-Encoder unterscheidet nicht zuverlässig
+zwischen „richtig", „selbstbewusst falsch (Geschwister-Problem)" und
+„korrekt unsicher". Eine funktionierende Kaskade bräuchte ein anderes
+Signal, das noch nicht identifiziert ist. Ersatz (LLM immer aufrufen) bleibt
+die einzige bisher gemessene Option, die alle vier Misses löst — mit der in
+Stufe 2 gemessenen Abstention-Regression (100 %→93 %) und den laufenden
+API-Kosten als bekanntem Preis.
+
+**Fallstrick:** `HF_TOKEN` in `.env` bricht `Settings()` komplett
+(`pydantic-settings` validiert `.env` strikt gegen das Schema, unbekannte
+Keys werfen `extra_forbidden` — auch für Secrets, die dabei im Klartext in
+der Fehlermeldung landen). Für lokale Cross-Encoder-Tests: `HF_TOKEN` als
+echte Windows-User-Env-Var setzen (`SetEnvironmentVariable(..., 'User')`),
+nicht in `.env` schreiben.
+
+---
+
 ## Nicht gepusht
 
 Elf Commits liegen lokal auf `main`, keiner davon gepusht. Reihenfolge (neueste zuerst):
