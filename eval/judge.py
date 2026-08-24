@@ -87,7 +87,7 @@ async def _default_answer_fn(question: str, docs: list, history: list, client) -
 async def judge_one(question: str, retriever, client, answer_fn=None) -> dict:
     answer_fn = answer_fn or _default_answer_fn
     standalone, _ = await rewrite_query([], question, client)
-    docs = retriever.retrieve(standalone, top_k=5)
+    docs, _ = await retriever.retrieve(standalone, top_k=5, client=client)
 
     if not docs:
         answer = NOT_FOUND_ANSWER
