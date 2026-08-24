@@ -10,16 +10,28 @@ QUESTIONS_PATH = Path("eval/questions.json")
 HOLDOUT_QUESTIONS_PATH = Path("eval/questions_holdout.json")
 OFFTOPIC_QUESTIONS_PATH = Path("eval/questions_offtopic.json")
 
-# Aktuell gemessen: Tuning 91 % (30/33), Holdout 100 % (15/15) — letzteres seit
-# die Eval nicht-deutsche Fragen umgeschrieben misst (siehe eval_query), also
-# denselben Pfad wie der Live-Bot. Schwellen sind ein Regressionsboden mit rund
-# zwei Fragen Puffer für Einzelfrage-Rauschen, keine Bestmarke: bei 33 bzw. 15
-# Fragen wiegt eine Frage 3 bzw. 6,7 Prozentpunkte.
+# ACHTUNG (Stand 2026-08-24): diese drei Schwellen wurden gegen den
+# Cross-Encoder-Pfad kalibriert (Werte/Messungen unten). Das eval-gate misst
+# seit der Umstellung auf den LLM-Reranker (Task 9) aber den LLM-Pfad, der in
+# einem frueheren Experiment ~100 % Tuning/Holdout-Hit-Rate und ~93 %
+# Abstention gemessen hat (siehe HANDOVER-llm-reranker.md) -- deutlich ueber
+# diesen Schwellen. Die Zahlen unten beschreiben also nicht mehr den Pfad, den
+# das Gate aktuell prueft; das Gate wuerde selbst einen deutlichen Rueckgang
+# der LLM-Pfad-Qualitaet (z.B. Abstention 93 % -> 40 %) noch durchwinken.
+# Neukalibrierung gegen echte, aktuelle LLM-Pfad-Messungen steht aus.
+#
+# Historisch (Cross-Encoder-Pfad), gemessen: Tuning 91 % (30/33), Holdout
+# 100 % (15/15) — letzteres seit die Eval nicht-deutsche Fragen umgeschrieben
+# misst (siehe eval_query), also denselben Pfad wie der Live-Bot. Schwellen
+# waren ein Regressionsboden mit rund zwei Fragen Puffer für
+# Einzelfrage-Rauschen, keine Bestmarke: bei 33 bzw. 15 Fragen wiegt eine
+# Frage 3 bzw. 6,7 Prozentpunkte.
 TUNING_MIN_HIT_RATE = 0.85
 HOLDOUT_MIN_HIT_RATE = 0.86
 # Anteil themenfremder Fragen, bei denen der Bot leer zurückgibt (siehe
-# app.retrieval: SIM_THRESHOLD / BM25_THRESHOLD / RERANK_THRESHOLD, ODER-
-# verknüpft). Gemessen auf eval/questions_offtopic.json (14 Fragen, gemischt
+# app.retrieval: SIM_THRESHOLD / BM25_THRESHOLD / RERANK_THRESHOLD bzw.
+# LLM_CONFIDENCE_THRESHOLD im LLM-Pfad, ODER-verknüpft). Historisch (Cross-
+# Encoder-Pfad) gemessen auf eval/questions_offtopic.json (14 Fragen, gemischt
 # eindeutig off-topic und absichtlich nah am Domänenvokabular): 50 % (7/14)
 # bei 0 verlorenen on-topic-Treffern. Die 7 Durchrutscher sind die gewollt
 # domänennahen Fragen (Omega-Wert, eBay-Vergleich, Versicherung) -- kein
@@ -68,9 +80,9 @@ async def hit_rate_at_k_with_audience(
     misst den tatsächlichen Live-Pfad, der in app/main.py nach dem Rewrite
     ebenfalls textproc.classify_audience() auf die Standalone-Frage anwendet.
 
-    Additive eigene Funktion statt hit_rate_at_k selbst zu erweitern: die
-    StubRetriever-Fixture in tests/test_eval.py kennt kein audience-Kwarg,
-    hit_rate_at_k muss also unverändert bleiben (siehe Docstring in
+    Additive eigene Funktion statt hit_rate_at_k selbst zu erweitern: so
+    bleibt hit_rate_at_k als einfachere, audience-lose Variante fuer
+    Aufrufer erhalten, die keinen Rollenfilter brauchen (siehe Docstring in
     Retriever.retrieve zur Rückwärtskompatibilität bestehender Aufrufer).
     """
     from app.textproc import classify_audience
@@ -169,7 +181,7 @@ async def _run_plain(retriever, argv: list[str], client) -> None:
     questions = json.loads(_questions_path(argv).read_text(encoding="utf-8"))
     if "--with-rewrite" in argv:
         questions = await _rewrite_questions(questions)
-    rate, misses = await hit_rate_at_k(retriever, questions, client=client)
+    _, misses = await hit_rate_at_k(retriever, questions, client=client)
     print(f"Hit-Rate@5: {format_rate(len(questions) - len(misses), len(questions))}")
     for miss in misses:
         print(f"  MISS: {miss['question']!r} erwartet {miss['expected_doc_id']}, bekam {miss['got']}")
