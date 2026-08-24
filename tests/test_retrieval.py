@@ -65,8 +65,8 @@ def test_rrf_fuse_rewards_docs_in_both_rankings():
     assert scores["b"] == pytest.approx(1 / 62 + 1 / 61)
 
 
-def test_retrieve_finds_matching_faq(retriever):
-    docs = retriever.retrieve("Wie funktioniert der Käuferschutz?")
+async def test_retrieve_finds_matching_faq(retriever):
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
     assert docs
     assert isinstance(docs[0], RetrievedDoc)
     assert docs[0].id == "faq-0001"
@@ -74,38 +74,39 @@ def test_retrieve_finds_matching_faq(retriever):
     assert "sichert deine Zahlung" in docs[0].text
 
 
-def test_retrieve_returns_empty_for_offtopic(retriever):
-    docs = retriever.retrieve("Gedicht über Katzen bitte")
+async def test_retrieve_returns_empty_for_offtopic(retriever):
+    docs, _ = await retriever.retrieve("Gedicht über Katzen bitte")
     assert docs == []
 
 
-def test_reranker_reorders_candidates(tmp_path):
+async def test_reranker_reorders_candidates(tmp_path):
     def prefer_selling(query, texts):
         return [2.0 if "Verkäuferkonto" in t else 1.0 for t in texts]
 
-    retriever = make_retriever(tmp_path, reranker=prefer_selling)
-    docs = retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    retriever = make_retriever(tmp_path, reranker=prefer_selling, use_llm_reranker=False)
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
     assert docs[0].id == "faq-0002"
     assert docs[0].rerank_score == 2.0
     assert docs[1].rerank_score == 1.0
 
 
-def test_reranker_false_keeps_rrf_order(tmp_path):
-    retriever = make_retriever(tmp_path, reranker=False)
-    docs = retriever.retrieve("Wie funktioniert der Käuferschutz?")
+async def test_reranker_false_keeps_rrf_order(tmp_path):
+    retriever = make_retriever(tmp_path, reranker=False, use_llm_reranker=False)
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
     assert docs[0].id == "faq-0001"
     assert docs[0].rerank_score is None
 
 
-def test_gate_fires_before_reranker(tmp_path):
+async def test_gate_fires_before_reranker(tmp_path):
     def exploding_reranker(query, texts):
         raise AssertionError("Reranker darf bei Off-Topic nicht laufen")
 
-    retriever = make_retriever(tmp_path, reranker=exploding_reranker)
-    assert retriever.retrieve("Gedicht über Katzen bitte") == []
+    retriever = make_retriever(tmp_path, reranker=exploding_reranker, use_llm_reranker=False)
+    docs, _ = await retriever.retrieve("Gedicht über Katzen bitte")
+    assert docs == []
 
 
-def test_variant_hit_resolves_to_canonical_doc(tmp_path):
+async def test_variant_hit_resolves_to_canonical_doc(tmp_path):
     """Query matcht nur die generierte Variante, nicht die Original-Frage direkt --
     der Vektor-Teil liefert die Varianten-ID zurueck, der Retriever muss sie auf
     faq-0001 zurueckmappen."""
@@ -141,14 +142,14 @@ def test_variant_hit_resolves_to_canonical_doc(tmp_path):
     # BM25-Gate aus: in Mini-Korpora sind BM25-Rohwerte nicht aussagekraeftig,
     # hier zaehlt nur der Vektorpfad.
     retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False,
-                          bm25_threshold=float("-inf"))
+                          bm25_threshold=float("-inf"), use_llm_reranker=False)
 
-    docs_out = retriever.retrieve("Was deckt der Kaeuferschutz ab?", top_k=5)
+    docs_out, _ = await retriever.retrieve("Was deckt der Kaeuferschutz ab?", top_k=5)
     assert docs_out[0].id == "faq-0001"
     assert [d.id for d in docs_out].count("faq-0001") == 1
 
 
-def test_vector_path_yields_n_distinct_canonical_docs_after_dedupe(tmp_path):
+async def test_vector_path_yields_n_distinct_canonical_docs_after_dedupe(tmp_path):
     """Pinnt die Ueberfetch-Invariante: der Vektorpfad muss n *verschiedene*
     kanonische Dokumente liefern, auch wenn mehrere Varianten derselben FAQ
     die naechsten Nachbarn der Query sind. Vor dem Fix (n_results=n VOR der
@@ -193,16 +194,16 @@ def test_vector_path_yields_n_distinct_canonical_docs_after_dedupe(tmp_path):
 
     retriever = Retriever(index_dir, corpus_path,
                           encoder=lambda text: list(vecmap.get(text, query_vec)),
-                          reranker=False, bm25_threshold=float("-inf"))
+                          reranker=False, bm25_threshold=float("-inf"), use_llm_reranker=False)
 
     # Fragetext kommt in keinem FAQ-Text vor -> BM25 traegt nichts bei, die
     # Rueckgabe-Reihenfolge stammt damit ausschliesslich aus dem Vektorpfad.
-    docs_out = retriever.retrieve("Xylophon Quietscheentchen Zauberstab", top_k=num_faqs)
+    docs_out, _ = await retriever.retrieve("Xylophon Quietscheentchen Zauberstab", top_k=num_faqs)
     ids = [d.id for d in docs_out]
     assert len(set(ids)) == num_faqs
 
 
-def test_gate_abstains_when_only_bm25_is_low(tmp_path):
+async def test_gate_abstains_when_only_bm25_is_low(tmp_path):
     """Off-Topic-Fragen in Fragesatzform erreichen beim multilingualen MiniLM hohe
     Cosine-Similarity ("Wie backe ich einen Hefezopf?": 0.742) -- das Sim-Signal
     allein kann sie nicht erkennen. BM25 sieht aber, dass kein Wort im Korpus
@@ -219,25 +220,28 @@ def test_gate_abstains_when_only_bm25_is_low(tmp_path):
     build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
     retriever = Retriever(index_dir, corpus_path, encoder=hefezopf_looks_like_faq,
                           reranker=neutral_reranker, bm25_threshold=1.0,
-                          rerank_threshold=-6.0)
+                          rerank_threshold=-6.0, use_llm_reranker=False)
 
-    assert retriever.retrieve("Wie backe ich einen Hefezopf?") == []
+    docs, _ = await retriever.retrieve("Wie backe ich einen Hefezopf?")
+    assert docs == []
     # Gegenprobe: eine echte Frage mit demselben Vektor bleibt durch.
-    assert retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    assert docs
 
 
-def test_gate_abstains_when_reranker_rejects_every_candidate(tmp_path):
+async def test_gate_abstains_when_reranker_rejects_every_candidate(tmp_path):
     """Nah am Domänenvokabular (Sim und BM25 beide hoch) bleibt der Cross-Encoder
     das letzte Signal: liegt selbst sein bester Score unter RERANK_THRESHOLD,
     passt kein Kandidat und der Bot antwortet leer statt zu raten."""
     def rejects_all(query, texts):
         return [-9.0 for _ in texts]
 
-    retriever = make_retriever(tmp_path, reranker=rejects_all)
-    assert retriever.retrieve("Wie funktioniert der Käuferschutz?") == []
+    retriever = make_retriever(tmp_path, reranker=rejects_all, use_llm_reranker=False)
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    assert docs == []
 
 
-def test_retrieve_with_audience_excludes_wrong_role(tmp_path):
+async def test_retrieve_with_audience_excludes_wrong_role(tmp_path):
     """Harter Pre-Filter (Schritt 1, corpus-storage-rethink-design.md): ein
     Verkaeufer-Dokument darf bei einer als 'kaeufer' klassifizierten Anfrage
     gar nicht erst in die Kandidatenmenge -- echter Ausschluss vor der
@@ -262,27 +266,28 @@ def test_retrieve_with_audience_excludes_wrong_role(tmp_path):
 
     build_index(corpus_path, index_dir, encoder=lambda texts: [encode(t) for t in texts])
     retriever = Retriever(index_dir, corpus_path, encoder=encode, reranker=False,
-                          bm25_threshold=float("-inf"))
+                          bm25_threshold=float("-inf"), use_llm_reranker=False)
 
     # Ohne audience-Filter finden beide Rollen den gleichen Kandidatenpool.
-    docs_out = retriever.retrieve("Wie funktioniert der Schutz?")
+    docs_out, _ = await retriever.retrieve("Wie funktioniert der Schutz?")
     assert {d.id for d in docs_out} == {"faq-buyer", "faq-seller"}
 
     # Mit hartem Filter verschwindet das Verkaeufer-Dokument komplett.
-    docs_out = retriever.retrieve("Wie funktioniert der Schutz?", audience="kaeufer")
+    docs_out, _ = await retriever.retrieve("Wie funktioniert der Schutz?", audience="kaeufer")
     ids = [d.id for d in docs_out]
     assert "faq-buyer" in ids
     assert "faq-seller" not in ids
 
 
-def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
+async def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
     """Leicht negative Rerank-Scores sind bei echten Treffern normal (on-topic
     Minimum gemessen -5.6) -- nur eindeutig unter der Schwelle wird verworfen."""
     def unsure(query, texts):
         return [-5.0 for _ in texts]
 
-    retriever = make_retriever(tmp_path, reranker=unsure)
-    assert retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    retriever = make_retriever(tmp_path, reranker=unsure, use_llm_reranker=False)
+    docs, _ = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    assert docs
 
 
 from app.retrieval import LLM_CONFIDENCE_THRESHOLD
