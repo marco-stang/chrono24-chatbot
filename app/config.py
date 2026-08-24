@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # Finetune auf Käufer/Verkäufer-Rollenpaaren (siehe README), privates
     # HF-Hub-Repo -- braucht HF_TOKEN als Env-Var zum Laden, siehe Deployment.
     rerank_model: str = "VoidFloat/chrono24-faq-reranker"
+    # Ersatz statt Cross-Encoder als Standard-Reranker (siehe Handover +
+    # Spec docs/superpowers/specs/2026-08-24-llm-reranker-integration-design.md).
+    # Rollback ohne Deploy: USE_LLM_RERANKER=false setzen und neu starten.
+    use_llm_reranker: bool = True
     index_dir: Path = Path("data/index")
     corpus_path: Path = Path("data/corpus.json")
     variants_path: Path = Path("data/variants.json")
