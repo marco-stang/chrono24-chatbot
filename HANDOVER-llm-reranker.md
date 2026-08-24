@@ -179,6 +179,48 @@ nächstes ansteht.
 
 ---
 
+## Stufe 2: voller Eval-Lauf + Schwellen-Rekalibrierung (2026-08-24)
+
+Umgesetzt in `eval/run_llm_reranker_stufe2.py` (Phase A: Rohmessung
+ungegatet über alle 62 Fragen, Phase B: Hit-Rate/Abstention mit
+vorgeschlagener Schwelle). `app/retrieval.py` weiterhin unverändert.
+
+**Rohmessung (Phase A):**
+
+| | Werte | Fallback | Gate-zu |
+|---|---|---|---|
+| on-topic (48 Fragen, Tuning+Holdout) | 48 | 0 | 0 |
+| off-topic (14 Fragen) | 9 | 0 | 5 |
+
+on-topic-Minimum: **9.0** — off-topic-Maximum: **9.0**. Die beiden Werte
+liegen exakt aufeinander, keine saubere Trennung. Vorgeschlagene Schwelle
+(on-topic-Minimum − 0,5 Puffer): **8,5**.
+
+**Voller Eval mit dieser Schwelle (Phase B):**
+
+| Metrik | Finetune-Cross-Encoder | Zwei-Signal (Schwelle 8,5) |
+|---|---|---|
+| Tuning-Hit-Rate@5 | 91 % (30/33) | **100 % (33/33)** |
+| Holdout-Hit-Rate@5 | 100 % (15/15) | 100 % (15/15) |
+| Abstention-Rate | 100 % (14/14) | **93 % (13/14)** |
+
+Einziger False Hit: „Wie viel ist meine geerbte Omega Seamaster ungefähr
+wert?" → `info-valuation-0006`, confidence 9.0 — dieselbe Frage, die schon
+in Stufe 1 auffiel, jetzt mit dem vollen Datensatz bestätigt statt nur als
+Einzelmessung.
+
+**Einordnung, keine Entscheidung:** Der Zwei-Signal-Reranker löst alle drei
+alten Dauer-Misses (Tuning 91 %→100 %) bei fast unveränderter Abstention
+(100 %→93 %, ein zusätzlicher Durchrutscher bei 14 Fragen). Ob dieser
+Trade-off — ein Prozentpunkt mehr Fehlalarm gegen neun Prozentpunkte mehr
+Tuning-Treffer, plus laufende API-Kosten statt einmaligem Finetune-Aufwand
+(siehe Kosten-Abschnitt oben) — die Integration rechtfertigt, ist eine
+Produktentscheidung, keine, die aus den Zahlen allein folgt. Nächster
+Schritt laut Spec: Integrationsentscheidung (Ersatz vs. Kaskade,
+Tagesbudget-Neukalkulation) — bewusst außerhalb dieses Experiments.
+
+---
+
 ## Nicht gepusht
 
 Elf Commits liegen lokal auf `main`, keiner davon gepusht. Reihenfolge (neueste zuerst):
