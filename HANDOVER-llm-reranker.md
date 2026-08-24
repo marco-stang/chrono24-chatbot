@@ -137,6 +137,48 @@ Beide Varianten sind ungetestet — das ist die eigentliche Aufgabe dieses Hando
 
 ---
 
+## Stufe 1: erste Messung des Zwei-Signal-Designs (2026-08-24)
+
+Umgesetzt nach `docs/superpowers/specs/2026-08-24-two-signal-reranker-design.md`
+und `docs/superpowers/plans/2026-08-24-two-signal-reranker-stufe1.md` — neues
+Modul `eval/llm_reranker.py` (Prompt, Parsing, Kandidaten-Union,
+`two_signal_candidates`-Wrapper) plus `eval/run_llm_reranker_experiment.py`
+für den isolierten Stufe-1-Lauf. `app/retrieval.py` unverändert.
+
+**Fallstrick beim ersten Lauf:** Haiku verpackt seine JSON-Antwort trotz
+expliziten Verbots im Prompt regelmäßig in ` ```json ... ``` `-Markdown-Fences.
+`json.loads` scheiterte daran bei **jedem** der 8 ersten API-Calls — der
+Parse-Fallback griff durchgehend, keiner der Calls lieferte ein echtes
+Signal, das Geld für den ersten Lauf war verloren. Fix: `_strip_code_fence()`
+in `eval/llm_reranker.py` vor `json.loads`, 5 neue Tests. Für jeden künftigen
+LLM-Reranker-Prompt einplanen, nicht nur für dieses Experiment.
+
+**Ergebnis nach dem Fix** (4 bekannte Problemfälle + 4 Off-Topic-Stichprobe):
+
+| Fall | Ergebnis |
+|---|---|
+| faq-0098 (Käuferschutz-Gebühr) | OK, confidence 9.0 |
+| faq-0162 (DAC7) | OK, confidence 9.0 |
+| faq-0033 (Certified) | OK, confidence 9.0 |
+| info-escrow-0007 (Escrow-Versand) | OK, confidence 9.0 |
+| "Wie backe ich einen Hefezopf?" | Gate zu (Stufe 1, vor jedem LLM-Call) |
+| "Welches Wetter … Karlsruhe?" | Gate zu (Stufe 1, vor jedem LLM-Call) |
+| "Omega Seamaster … Wert?" (domänennah) | Kandidat durch, confidence **9.0** |
+| "eBay-Rückgabepolitik vs. Chrono24" (domänennah) | Kandidat durch, confidence 2.0 |
+
+Alle vier Dauer-Misses bestätigt gelöst, mit klar hoher Konfidenz. Die
+Off-Topic-Trennung ist aber nicht sauber: von den zwei domänennahen
+Durchrutschern, die die bestehende Stufe-1-Schwelle passieren, bekommt einer
+(eBay-Vergleich) korrekt niedrige Konfidenz, der andere (Omega-Bewertung)
+dieselbe Konfidenz wie ein echter Treffer — **die im Design-Dokument
+benannte Überlappungs-Gefahr tritt real auf**, wenn auch nur bei einem von
+zwei geprüften Grenzfällen. Zu wenig Stichprobe (nur 4 Off-Topic-Fragen), um
+daraus zu schließen, ob das Design insgesamt trägt — das ist genau die
+Aufgabe von Stufe 2 (voller Eval-Lauf, Schwellen-Rekalibrierung), die als
+nächstes ansteht.
+
+---
+
 ## Nicht gepusht
 
 Elf Commits liegen lokal auf `main`, keiner davon gepusht. Reihenfolge (neueste zuerst):
