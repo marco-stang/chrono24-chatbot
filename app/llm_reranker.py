@@ -7,6 +7,8 @@ import json
 import re
 from typing import TYPE_CHECKING
 
+import anthropic
+
 from app.config import settings
 
 if TYPE_CHECKING:
@@ -111,16 +113,26 @@ async def llm_two_signal_rerank(
     used_fallback, tokens) zurueck. ranking[0] ist der Index des nach
     Rangfolge bestplatzierten Kandidaten in docs. used_fallback ist True,
     wenn die Antwort nicht valide geparst werden konnte (siehe
-    _parse_response) -- Aufrufer sollten das nicht mit einer echten
-    confidence von 0.0 verwechseln. tokens = verbrauchte Input- + Output-
-    Tokens, fuers Tagesbudget-Tracking."""
-    response = await client.messages.create(
-        model=settings.model,
-        max_tokens=MAX_LLM_RERANK_TOKENS,
-        system=_system_prompt(len(docs)),
-        temperature=0,
-        messages=[{"role": "user", "content": build_llm_rerank_prompt(query, docs)}],
-    )
+    _parse_response) ODER der API-Call selbst fehlgeschlagen ist (Rate-Limit,
+    Timeout, Overload -- nach den SDK-eigenen Retries). Aufrufer sollten das
+    nicht mit einer echten confidence von 0.0 verwechseln. Vor dieser
+    Integration war Retrieval rein lokal und konnte so nie fehlschlagen; ein
+    API-Fehler wird hier bewusst wie ein Parse-Fehler behandelt (leeres
+    Ergebnis statt Absturz, siehe Spec "Fehlerbehandlung") -- der Aufrufer
+    (Retriever.retrieve) braucht dafuer keine eigene Fehlerbehandlung.
+    tokens = verbrauchte Input- + Output-Tokens, fuers Tagesbudget-Tracking;
+    0 bei einem API-Fehler, da dann keine Antwort mit usage-Feld existiert."""
+    identity = list(range(len(docs)))
+    try:
+        response = await client.messages.create(
+            model=settings.model,
+            max_tokens=MAX_LLM_RERANK_TOKENS,
+            system=_system_prompt(len(docs)),
+            temperature=0,
+            messages=[{"role": "user", "content": build_llm_rerank_prompt(query, docs)}],
+        )
+    except anthropic.APIError:
+        return identity, 0.0, True, 0
     text = next((b.text for b in response.content if b.type == "text"), "").strip()
     ranking, confidence, used_fallback = _parse_response(text, len(docs))
     tokens = response.usage.input_tokens + response.usage.output_tokens

@@ -1,3 +1,7 @@
+import anthropic
+import httpx
+import pytest
+
 from app.llm_reranker import (
     _parse_response,
     _system_prompt,
@@ -233,3 +237,49 @@ async def test_llm_two_signal_rerank_falls_back_on_malformed_response():
     assert confidence == 0.0
     assert used_fallback is True
     assert tokens == 95
+
+
+class _RaisingMessages:
+    """Simuliert einen API-Fehler (Rate-Limit/Timeout/Overload) nach den
+    SDK-eigenen Retries -- client.messages.create() wirft statt eine Antwort
+    zurueckzugeben."""
+
+    def __init__(self, error: BaseException):
+        self._error = error
+
+    async def create(self, **kwargs):
+        raise self._error
+
+
+class _RaisingClient:
+    def __init__(self, error: BaseException):
+        self.messages = _RaisingMessages(error)
+
+
+def _make_api_error() -> anthropic.APIError:
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    return anthropic.APIError("upstream overloaded", request, body=None)
+
+
+async def test_llm_two_signal_rerank_treats_api_error_like_parse_fallback():
+    """Vor dieser Integration war Retrieval rein lokal und konnte nie an
+    einem Netzwerkfehler scheitern. anthropic.APIError (Basisklasse fuer
+    retrybare wie nicht-retrybare Fehler des SDKs) muss deshalb genauso
+    abstinieren wie ein Parse-Fallback -- kein unbehandelter Absturz bis in
+    Retriever.retrieve() hinein."""
+    client = _RaisingClient(_make_api_error())
+    ranking, confidence, used_fallback, tokens = await llm_two_signal_rerank("Frage?", DOCS, client)
+    assert ranking == [0, 1]
+    assert confidence == 0.0
+    assert used_fallback is True
+    assert tokens == 0
+
+
+async def test_llm_two_signal_rerank_does_not_catch_non_api_errors():
+    """Nur anthropic.APIError (und Subklassen) wird abgefangen -- ein
+    Programmierfehler (z.B. TypeError durch falsch verdrahtete kwargs) soll
+    weiterhin sichtbar crashen statt still als Abstention maskiert zu
+    werden."""
+    client = _RaisingClient(TypeError("nicht abgefangen"))
+    with pytest.raises(TypeError):
+        await llm_two_signal_rerank("Frage?", DOCS, client)

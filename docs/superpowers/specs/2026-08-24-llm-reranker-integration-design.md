@@ -198,6 +198,13 @@ Produktionspfad wie eine zu niedrige Konfidenz behandelt — leeres Ergebnis,
 keine Antwort, kein stiller Fehltreffer. Das ist strenger als during Stufe
 1/2 (dort nur geloggt), weil hier ein echter Nutzer die Antwort sieht.
 
+Netzwerk-/API-Fehler beim `client.messages.create`-Aufruf (Rate-Limit,
+Timeout, Overload nach den SDK-eigenen Retries) fängt
+`llm_two_signal_rerank` als `anthropic.APIError` ab und behandelt sie
+identisch zu einem Parse-Fallback (`used_fallback=True`, Konfidenz 0.0,
+0 Tokens) — der Retriever abstiniert dadurch ohne eigene Fehlerbehandlung,
+statt den Fehler unbehandelt bis zum Request durchschlagen zu lassen.
+
 ## Nicht Teil dieser Spec
 
 - Keine Änderung an `daily_token_budget` (bleibt 200.000, Entscheidung
