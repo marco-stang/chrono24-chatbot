@@ -31,17 +31,19 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: hf-models-${{ hashFiles('app/config.py') }}
-          restore-keys: |
-            hf-models-
       - run: pip install -r requirements-dev.txt
       # Index wird nicht mehr committet (siehe README, "Pipeline neu bauen") --
       # ohne API-Kosten, Embedding laeuft lokal.
       - run: python -m pipeline.index
+      # Testet ab jetzt den LLM-Reranker-Pfad (settings.use_llm_reranker
+      # Standard True) statt des Cross-Encoders -- das Gate soll pruefen,
+      # was tatsaechlich live laeuft. Kostet ab jetzt echte API-Calls pro
+      # Lauf (siehe HANDOVER-llm-reranker.md, Budget-Messung). Kein
+      # HF-Modell-Cache-Step mehr noetig -- der Cross-Encoder wird bei
+      # use_llm_reranker=True nicht geladen.
       - run: python -m eval.run_eval --gate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   quality-gate:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
