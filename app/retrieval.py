@@ -235,8 +235,16 @@ class Retriever:
             return [], 0
 
         if self.use_llm_reranker:
+            if client is None:
+                raise ValueError("client is required when use_llm_reranker=True")
             ids = union_candidates(vector_ranking, bm25_ranking)
             docs = [self._to_doc(doc_id, 0.0) for doc_id in ids]
+            # Unerreichbar unter Produktionsschwellen (das Gate oben laesst
+            # nur bei nicht-leeren Rankings durch), aber ohne die Guard
+            # wuerde ein permissiver Test-Threshold weiter unten mit einem
+            # IndexError auf ordered[0] crashen statt leer zurueckzugeben.
+            if not docs:
+                return [], 0
             ranking, confidence, used_fallback, tokens = await llm_two_signal_rerank(
                 query, docs, client)
             if used_fallback or confidence < LLM_CONFIDENCE_THRESHOLD:

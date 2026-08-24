@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.retrieval import RetrievedDoc, Retriever, rrf_fuse
+from app.retrieval import LLM_CONFIDENCE_THRESHOLD, RetrievedDoc, Retriever, rrf_fuse
 from pipeline.index import build_index
 
 DOCS = [
@@ -290,9 +290,6 @@ async def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
     assert docs
 
 
-from app.retrieval import LLM_CONFIDENCE_THRESHOLD
-
-
 class _FakeRerankClient:
     def __init__(self, response_text):
         self._response_text = response_text
@@ -420,3 +417,91 @@ def test_init_skips_cross_encoder_load_when_llm_reranker_enabled(tmp_path, monke
     # Test mit AssertionError zum Scheitern bringen.
     Retriever(index_dir, corpus_path, encoder=encode_one, bm25_threshold=1.0,
              use_llm_reranker=True)
+
+
+def test_init_loads_cross_encoder_when_llm_reranker_disabled(tmp_path, monkeypatch):
+    """Gegenprobe zu test_init_skips_cross_encoder_load_when_llm_reranker_enabled:
+    ohne reranker=-Override und mit use_llm_reranker=False (Rollback-Flag)
+    MUSS _default_reranker() aufgerufen werden -- jeder bestehende
+    Cross-Encoder-Test uebergibt reranker=<mock> und umgeht damit genau diese
+    Zeile, sodass eine Regression zu self.reranker = None dort unbemerkt
+    bliebe."""
+    sentinel = object()
+    monkeypatch.setattr("app.retrieval._default_reranker", lambda: sentinel)
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    # Kein reranker=-Override, use_llm_reranker=False -> MUSS _default_reranker
+    # aufrufen und dessen Rueckgabewert uebernehmen.
+    retriever = Retriever(index_dir, corpus_path, encoder=encode_one, bm25_threshold=1.0,
+                          use_llm_reranker=False)
+    assert retriever.reranker is sentinel
+
+
+async def test_retrieve_llm_path_uses_union_not_rrf_cut(tmp_path, monkeypatch):
+    """Beweist, dass der LLM-Pfad union_candidates() nutzt und nicht RRF-Fusion
+    + Top-n-Cut (die Kandidaten-Union ist der Kern dieser Integration).
+
+    Aufbau: TOP_K_CANDIDATES=10 (n=10), Vektor- und BM25-Ranking sind
+    disjunkte 10er-Listen ("v0".."v9" bzw. "b0".."b9"). Die RRF-Formel
+    haengt nur vom Rang ab, also sind score(v_i) == score(b_i) fuer jedes i
+    -- bei stabiler Sortierung ergibt sich v0,b0,v1,b1,...,v9,b9. Ein
+    Top-10-Cut (wie im Cross-Encoder-Pfad) wuerde exakt bei Index 10 kappen
+    und "b9" verlieren, das nur im BM25-Ranking auf Rang 9 steht und im
+    Vektor-Ranking ueberhaupt nicht vorkommt. union_candidates() dedupliziert
+    nur, kappt aber nicht -- "b9" muss also als Kandidat im LLM-Prompt
+    landen."""
+    num_docs = 20
+    docs_corpus = [
+        {"id": f"v{i}" if i < 10 else f"b{i - 10}", "type": "faq",
+         "question": f"FAQ Frage {i}", "answer": f"Antwort {i}.",
+         "category": "Kaufen", "url": "https://www.chrono24.de/info/faqs.htm"}
+        for i in range(num_docs)
+    ]
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": docs_corpus}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [[1.0, 0.0, 0.0] for _ in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=lambda t: [1.0, 0.0, 0.0],
+                          reranker=False, sim_threshold=float("-inf"),
+                          bm25_threshold=float("-inf"), use_llm_reranker=True)
+
+    vector_ranking = [f"v{i}" for i in range(10)]
+    bm25_ranking = [f"b{i}" for i in range(10)]
+    monkeypatch.setattr(
+        retriever, "_vector_candidates",
+        lambda query, n, total, audience: (vector_ranking, 1.0))
+    monkeypatch.setattr(
+        retriever, "_bm25_candidates",
+        lambda query, n, audience: (bm25_ranking, 100.0))
+
+    captured_prompts = []
+
+    class _CapturingMessages:
+        async def create(self, **kwargs):
+            captured_prompts.append(kwargs["messages"][0]["content"])
+            n = len(kwargs["messages"][0]["content"].split("\n\n")) - 1
+            response_text = json.dumps(
+                {"ranking": list(range(n)), "top1_confidence": 9})
+            return _FakeRerankClient._FakeResponse(response_text)
+
+    class _CapturingClient:
+        @property
+        def messages(self):
+            return _CapturingMessages()
+
+    docs_out, _ = await retriever.retrieve("FAQ Frage", client=_CapturingClient())
+
+    assert captured_prompts, "LLM-Client wurde nicht aufgerufen"
+    prompt = captured_prompts[0]
+    # "b9" (der eigentliche Zieldoc, id "b9") traegt den Titel "FAQ Frage 19"
+    # (i=19 im Corpus-Aufbau oben) -- muss als Kandidat [19] im Prompt stehen.
+    assert "[19] FAQ Frage 19" in prompt
+    # Gegenprobe: alle 20 union-Kandidaten muessen im Prompt auftauchen, nicht
+    # nur die 10 eines RRF-Top-n-Cuts.
+    for i in range(20):
+        assert f"[{i}] FAQ Frage {i}" in prompt
+    assert docs_out[0].id == "v0"
