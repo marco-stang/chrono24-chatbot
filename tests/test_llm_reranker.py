@@ -174,3 +174,36 @@ def test_two_signal_candidates_closes_gate_for_offtopic(tmp_path):
     docs, gate_open = two_signal_candidates(retriever, "Gedicht über Katzen bitte", None)
     assert gate_open is False
     assert docs == []
+
+
+def test_two_signal_candidates_union_vs_rrf_cut(tmp_path, monkeypatch):
+    """Verify union (not RRF-top-n-cut) when n < total.
+
+    The fix: union_candidates([vector_top_2], [bm25_top_2]) yields 3 docs
+    when rankings diverge, while naive RRF-fuse-then-cut-to-2 would yield only 2.
+    Monkeypatch TOP_K_CANDIDATES to 2, mock divergent rankings, verify all 3 docs.
+    """
+    # Monkeypatch TOP_K_CANDIDATES so n=min(2, total) = 2 < total
+    monkeypatch.setattr("eval.llm_reranker.TOP_K_CANDIDATES", 2)
+
+    retriever = _build_retriever(tmp_path)
+
+    # Mock rankings to have a split: vector=[A, B], bm25=[A, C]
+    # This forces union=[A, B, C] but RRF-top-2-cut=[A, ...one of B/C]
+    def mock_vector_candidates(query, n, total, audience):
+        return (["faq-0001", "faq-0002"], 0.9)  # Top 2: faq-0001, faq-0002
+
+    def mock_bm25_candidates(query, n, audience):
+        return (["faq-0001", "info-shipping-0001"], 6.0)  # Top 2: faq-0001, info-shipping-0001
+
+    monkeypatch.setattr(retriever, "_vector_candidates", mock_vector_candidates)
+    monkeypatch.setattr(retriever, "_bm25_candidates", mock_bm25_candidates)
+
+    docs, gate_open = two_signal_candidates(retriever, "test query", None)
+
+    assert gate_open is True
+    # Union of [faq-0001, faq-0002] + [faq-0001, info-shipping-0001]
+    # should yield [faq-0001, faq-0002, info-shipping-0001] (3 docs)
+    # If implementation used RRF-fuse-then-cut-to-2, it would return only 2.
+    assert len(docs) == 3
+    assert {d.id for d in docs} == {"faq-0001", "faq-0002", "info-shipping-0001"}
