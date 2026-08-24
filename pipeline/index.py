@@ -6,12 +6,12 @@ docs/superpowers/specs/2026-08-23-corpus-storage-rethink-design.md, Schritt 2).
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import sqlite_vec
 
 from app.config import settings
+from app.db import connect as _connect
 
 # Ausgabedimension von settings.embed_model (paraphrase-multilingual-MiniLM-L12-v2).
 # Nur Fallback fuer den (praktisch nie vorkommenden) Fall eines leeren Corpus --
@@ -119,14 +119,6 @@ def _variant_entries(
         return [], [], [], []
     embeddings = encoder(texts)
     return ids, embeddings, canonical_ids, audiences
-
-
-def _connect(db_path: Path) -> sqlite3.Connection:
-    db = sqlite3.connect(str(db_path))
-    db.enable_load_extension(True)
-    sqlite_vec.load(db)
-    db.enable_load_extension(False)
-    return db
 
 
 def build_index(

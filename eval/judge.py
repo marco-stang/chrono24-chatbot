@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.llm import build_context, rewrite_query, stream_answer
+from app.textproc import classify_audience
 from eval.stats import format_rate
 
 logger = logging.getLogger("chrono24-chatbot.judge")
@@ -87,7 +88,8 @@ async def _default_answer_fn(question: str, docs: list, history: list, client) -
 async def judge_one(question: str, retriever, client, answer_fn=None) -> dict:
     answer_fn = answer_fn or _default_answer_fn
     standalone, _ = await rewrite_query([], question, client)
-    docs, _ = await retriever.retrieve(standalone, top_k=5, client=client)
+    audience = classify_audience(standalone)
+    docs, _ = await retriever.retrieve(standalone, top_k=5, audience=audience, client=client)
 
     if not docs:
         answer = NOT_FOUND_ANSWER

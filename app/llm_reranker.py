@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import anthropic
 
 from app.config import settings
+from app.ranking import dedupe_ranking
 
 if TYPE_CHECKING:
     from app.retrieval import RetrievedDoc
@@ -93,17 +94,11 @@ def _parse_response(text: str, n: int) -> tuple[list[int], float, bool]:
 def union_candidates(vector_ranking: list[str], bm25_ranking: list[str]) -> list[str]:
     """Vereinigung statt RRF-Top-n-Cut -- Kandidaten-Union-Fix: ohne ihn
     sieht kein Reranker Kandidaten, die nur in einer der beiden Top-10-
-    Listen weit vorn liegen. Dedupe hier inline statt ueber
-    app.retrieval._dedupe_ranking importiert, damit dieses Modul zur
-    Laufzeit nichts aus app.retrieval braucht (zirkulaerer Import, siehe
-    Spec: app.retrieval importiert umgekehrt aus diesem Modul)."""
-    seen: set[str] = set()
-    result: list[str] = []
-    for doc_id in vector_ranking + bm25_ranking:
-        if doc_id not in seen:
-            seen.add(doc_id)
-            result.append(doc_id)
-    return result
+    Listen weit vorn liegen. dedupe_ranking lebt in app.ranking statt in
+    app.retrieval, damit beide Module es importieren koennen ohne
+    zirkulaeren Import (app.retrieval importiert umgekehrt
+    llm_two_signal_rerank/union_candidates aus diesem Modul)."""
+    return dedupe_ranking(vector_ranking + bm25_ranking)
 
 
 async def llm_two_signal_rerank(

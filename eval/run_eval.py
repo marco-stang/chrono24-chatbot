@@ -109,10 +109,13 @@ async def abstention_rate(retriever, questions: list[dict], client=None) -> tupl
     landen mit ihrem Top-Treffer (id + title) in der Fehlliste, damit ein
     Fehlschlag diagnostizierbar bleibt.
     """
+    from app.textproc import classify_audience
+
     false_hits = []
     abstained = 0
     for item in questions:
-        docs, _ = await retriever.retrieve(item["question"], client=client)
+        audience = classify_audience(item["question"])
+        docs, _ = await retriever.retrieve(item["question"], audience=audience, client=client)
         if not docs:
             abstained += 1
         else:

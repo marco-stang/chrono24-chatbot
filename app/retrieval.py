@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 import sqlite_vec
 
 from app.config import settings
+from app.db import connect as _connect
 from app.llm_reranker import llm_two_signal_rerank, union_candidates
+from app.ranking import dedupe_ranking
 from app.textproc import expand_query
 
 TOP_K_CANDIDATES = 10
@@ -80,17 +81,6 @@ def rrf_fuse(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
     return scores
 
 
-def _dedupe_ranking(ids: list[str]) -> list[str]:
-    """Erster (bester) Treffer pro kanonischer ID gewinnt -- Varianten-Duplikate raus."""
-    seen: set[str] = set()
-    result: list[str] = []
-    for doc_id in ids:
-        if doc_id not in seen:
-            seen.add(doc_id)
-            result.append(doc_id)
-    return result
-
-
 def _default_encoder():
     from sentence_transformers import SentenceTransformer
 
@@ -103,14 +93,6 @@ def _default_reranker():
 
     model = CrossEncoder(settings.rerank_model)
     return lambda query, texts: [float(s) for s in model.predict([(query, t) for t in texts])]
-
-
-def _connect(db_path: Path) -> sqlite3.Connection:
-    db = sqlite3.connect(str(db_path))
-    db.enable_load_extension(True)
-    sqlite_vec.load(db)
-    db.enable_load_extension(False)
-    return db
 
 
 def _fts5_match_query(tokens: list[str]) -> str | None:
@@ -153,6 +135,9 @@ class Retriever:
         self.db = _connect(Path(index_dir) / "hybrid.db")
         corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
         self.docs = {d["id"]: d for d in corpus["documents"]}
+        # Index ist ab hier read-only fuer die Lebensdauer dieser Instanz (offline
+        # per pipeline/index.py gebaut) -- einmal zaehlen statt bei jedem retrieve().
+        self.total_docs = self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
 
     def _vector_candidates(
         self, query: str, n: int, total: int, audience: str | None
@@ -182,7 +167,7 @@ class Retriever:
                 "WHERE embedding MATCH ? AND k = ? ORDER BY distance",
                 (query_vec, fetch_n),
             ).fetchall()
-        ranking = _dedupe_ranking([r[0] for r in rows])[:n]
+        ranking = dedupe_ranking([r[0] for r in rows])[:n]
         best_sim = 1.0 - rows[0][1] if rows else 0.0
         return ranking, best_sim
 
@@ -194,17 +179,23 @@ class Retriever:
         match_query = _fts5_match_query(expand_query(query))
         if match_query is None or not n:
             return [], 0.0
+        # bm25() einmal in der inneren Subquery berechnen statt in SELECT und
+        # ORDER BY separat aufzurufen -- FTS5s Auxiliary-Funktion hat echte
+        # Pro-Zeile-Kosten, zwei Aufrufe scoren jede Trefferzeile zweimal.
         if audience in ("kaeufer", "verkaeufer"):
             rows = self.db.execute(
-                "SELECT doc_id, bm25(bm25_docs) FROM bm25_docs "
-                "WHERE bm25_docs MATCH ? AND audience IN (?, 'neutral') "
-                "ORDER BY bm25(bm25_docs) LIMIT ?",
+                "SELECT doc_id, score FROM ("
+                "  SELECT doc_id, bm25(bm25_docs) AS score FROM bm25_docs "
+                "  WHERE bm25_docs MATCH ? AND audience IN (?, 'neutral')"
+                ") ORDER BY score LIMIT ?",
                 (match_query, audience, n),
             ).fetchall()
         else:
             rows = self.db.execute(
-                "SELECT doc_id, bm25(bm25_docs) FROM bm25_docs "
-                "WHERE bm25_docs MATCH ? ORDER BY bm25(bm25_docs) LIMIT ?",
+                "SELECT doc_id, score FROM ("
+                "  SELECT doc_id, bm25(bm25_docs) AS score FROM bm25_docs "
+                "  WHERE bm25_docs MATCH ?"
+                ") ORDER BY score LIMIT ?",
                 (match_query, n),
             ).fetchall()
         ranking = [r[0] for r in rows]
@@ -214,11 +205,30 @@ class Retriever:
         best_bm25 = -rows[0][1] if rows else 0.0
         return ranking, best_bm25
 
+    def _union_docs(self, vector_ranking: list[str], bm25_ranking: list[str]) -> list[RetrievedDoc]:
+        ids = union_candidates(vector_ranking, bm25_ranking)
+        return [self._to_doc(doc_id, 0.0) for doc_id in ids]
+
+    def candidates_for_rerank(
+        self, query: str, audience: str | None = None
+    ) -> tuple[list[RetrievedDoc], bool]:
+        """Kandidaten-Union nach Stufe-1-Gate, wie retrieve()'s
+        use_llm_reranker-Zweig sie braucht. Oeffentlich, damit die
+        Kalibrierungsskripte (eval/run_llm_reranker_*) denselben Pfad wie
+        Produktion aufrufen statt ihn ueber private Retriever-Methoden
+        nachzubauen."""
+        n = min(TOP_K_CANDIDATES, self.total_docs)
+        vector_ranking, best_sim = self._vector_candidates(query, n, self.total_docs, audience)
+        bm25_ranking, best_bm25 = self._bm25_candidates(query, n, audience)
+        if best_sim < self.sim_threshold or best_bm25 < self.bm25_threshold:
+            return [], False
+        return self._union_docs(vector_ranking, bm25_ranking), True
+
     async def retrieve(self, query: str, top_k: int = 5,
                        audience: str | None = None, client=None) -> tuple[list[RetrievedDoc], int]:
         """Gibt (Dokumente, verbrauchte Reranker-Tokens) zurueck. Tokens
         sind 0 im Cross-Encoder-Pfad (self.use_llm_reranker=False)."""
-        total = self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+        total = self.total_docs
         n = min(TOP_K_CANDIDATES, total)
 
         # Harter Pre-Filter vor der Kandidaten-Fusion (kein Score-Abzug):
@@ -237,8 +247,7 @@ class Retriever:
         if self.use_llm_reranker:
             if client is None:
                 raise ValueError("client is required when use_llm_reranker=True")
-            ids = union_candidates(vector_ranking, bm25_ranking)
-            docs = [self._to_doc(doc_id, 0.0) for doc_id in ids]
+            docs = self._union_docs(vector_ranking, bm25_ranking)
             # Unerreichbar unter Produktionsschwellen (das Gate oben laesst
             # nur bei nicht-leeren Rankings durch), aber ohne die Guard
             # wuerde ein permissiver Test-Threshold weiter unten mit einem

@@ -16,8 +16,8 @@ import json
 
 from app.config import settings
 from app.llm import get_client
-from app.llm_reranker import llm_two_signal_rerank, union_candidates
-from app.retrieval import TOP_K_CANDIDATES, Retriever
+from app.llm_reranker import llm_two_signal_rerank
+from app.retrieval import Retriever
 from app.textproc import classify_audience
 from eval.run_eval import (
     HOLDOUT_QUESTIONS_PATH,
@@ -25,6 +25,7 @@ from eval.run_eval import (
     QUESTIONS_PATH,
     eval_query,
 )
+from eval.stats import format_rate
 
 # Puffer unter dem gemessenen on-topic-Minimum, analog zu den bestehenden
 # Schwellen in app/retrieval.py (z.B. RERANK_THRESHOLD, Puffer fuer
@@ -32,24 +33,12 @@ from eval.run_eval import (
 THRESHOLD_BUFFER = 0.5
 
 
-def _two_signal_candidates(retriever, query, audience):
-    total = retriever.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
-    n = min(TOP_K_CANDIDATES, total)
-    vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
-    bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
-    if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
-        return [], False
-    ids = union_candidates(vector_ranking, bm25_ranking)
-    docs = [retriever._to_doc(doc_id, 0.0) for doc_id in ids]
-    return docs, True
-
-
 async def two_signal_result(
     retriever: Retriever, query: str, client, audience: str | None
 ):
     """None, wenn Stufe-1-Gate (sim/bm25) schon keine Kandidaten durchlaesst.
     Sonst (docs, ranking, confidence, used_fallback)."""
-    docs, gate_open = _two_signal_candidates(retriever, query, audience)
+    docs, gate_open = retriever.candidates_for_rerank(query, audience)
     if not gate_open or not docs:
         return None
     ranking, confidence, used_fallback, _tokens = await llm_two_signal_rerank(query, docs, client)
@@ -160,18 +149,18 @@ async def main() -> None:
           f"(on-topic-Minimum - Puffer {THRESHOLD_BUFFER})")
 
     print("\n-- Phase B: voller Eval mit vorgeschlagener Schwelle --")
-    tuning_rate, tuning_misses = await hit_rate_at_k_two_signal(
+    _, tuning_misses = await hit_rate_at_k_two_signal(
         retriever, client, tuning, threshold=suggested_threshold
     )
-    holdout_rate, _ = await hit_rate_at_k_two_signal(
+    _, holdout_misses = await hit_rate_at_k_two_signal(
         retriever, client, holdout, threshold=suggested_threshold
     )
-    abstain_rate, false_hits = await abstention_rate_two_signal(
+    _, false_hits = await abstention_rate_two_signal(
         retriever, client, offtopic, threshold=suggested_threshold
     )
-    print(f"  Tuning-Hit-Rate@5:  {tuning_rate:.0%} ({len(tuning) - len(tuning_misses)}/{len(tuning)})")
-    print(f"  Holdout-Hit-Rate@5: {holdout_rate:.0%}")
-    print(f"  Abstention-Rate:    {abstain_rate:.0%}")
+    print(f"  Tuning-Hit-Rate@5:  {format_rate(len(tuning) - len(tuning_misses), len(tuning))}")
+    print(f"  Holdout-Hit-Rate@5: {format_rate(len(holdout) - len(holdout_misses), len(holdout))}")
+    print(f"  Abstention-Rate:    {format_rate(len(offtopic) - len(false_hits), len(offtopic))}")
     for miss in tuning_misses:
         print(f"  TUNING MISS: {miss['question']!r} erwartet {miss['expected_doc_id']} "
               f"({miss.get('reason', 'wrong_top_k')})")
