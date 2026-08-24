@@ -101,7 +101,10 @@ def create_app(retriever=None, budget=None, answer_fn=None, rewrite_fn=None,
                 if rewrite_tokens:
                     app.state.budget.spend(rewrite_tokens)
                 audience = textproc.classify_audience(standalone)
-                docs = app.state.retriever.retrieve(standalone, audience=audience)
+                docs, rerank_tokens = await app.state.retriever.retrieve(
+                    standalone, audience=audience, client=client)
+                if rerank_tokens:
+                    app.state.budget.spend(rerank_tokens)
                 yield sse({"type": "retrieval",
                            "docs": [{"id": d.id, "title": d.title, "score": d.score,
                                      "rerank": d.rerank_score}
