@@ -16,9 +16,9 @@ import json
 
 from app.config import settings
 from app.llm import get_client
-from app.retrieval import Retriever
+from app.llm_reranker import llm_two_signal_rerank, union_candidates
+from app.retrieval import TOP_K_CANDIDATES, Retriever
 from app.textproc import classify_audience
-from eval.llm_reranker import llm_two_signal_rerank, two_signal_candidates
 from eval.run_eval import (
     HOLDOUT_QUESTIONS_PATH,
     OFFTOPIC_QUESTIONS_PATH,
@@ -32,15 +32,27 @@ from eval.run_eval import (
 THRESHOLD_BUFFER = 0.5
 
 
+def _two_signal_candidates(retriever, query, audience):
+    total = retriever.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+    n = min(TOP_K_CANDIDATES, total)
+    vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
+    bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
+    if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
+        return [], False
+    ids = union_candidates(vector_ranking, bm25_ranking)
+    docs = [retriever._to_doc(doc_id, 0.0) for doc_id in ids]
+    return docs, True
+
+
 async def two_signal_result(
     retriever: Retriever, query: str, client, audience: str | None
 ):
     """None, wenn Stufe-1-Gate (sim/bm25) schon keine Kandidaten durchlaesst.
     Sonst (docs, ranking, confidence, used_fallback)."""
-    docs, gate_open = two_signal_candidates(retriever, query, audience)
+    docs, gate_open = _two_signal_candidates(retriever, query, audience)
     if not gate_open or not docs:
         return None
-    ranking, confidence, used_fallback = await llm_two_signal_rerank(query, docs, client)
+    ranking, confidence, used_fallback, _tokens = await llm_two_signal_rerank(query, docs, client)
     return docs, ranking, confidence, used_fallback
 
 
@@ -114,7 +126,8 @@ async def abstention_rate_two_signal(
 
 
 async def main() -> None:
-    retriever = Retriever(settings.index_dir, settings.corpus_path, reranker=False)
+    retriever = Retriever(settings.index_dir, settings.corpus_path, reranker=False,
+                          use_llm_reranker=False)
     client = get_client()
 
     tuning = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))

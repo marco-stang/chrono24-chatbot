@@ -49,9 +49,15 @@ class _FakeTextBlock:
         self.text = text
 
 
+class _FakeUsage:
+    input_tokens = 80
+    output_tokens = 15
+
+
 class _FakeResponse:
     def __init__(self, text):
         self.content = [_FakeTextBlock(text)]
+        self.usage = _FakeUsage()
 
 
 class _FakeMessages:

@@ -13,9 +13,9 @@ import json
 
 from app.config import settings
 from app.llm import get_client
-from app.retrieval import Retriever
+from app.llm_reranker import llm_two_signal_rerank, union_candidates
+from app.retrieval import TOP_K_CANDIDATES, Retriever
 from app.textproc import classify_audience
-from eval.llm_reranker import llm_two_signal_rerank, two_signal_candidates
 from eval.run_eval import OFFTOPIC_QUESTIONS_PATH, QUESTIONS_PATH, eval_query
 
 KNOWN_MISS_IDS = {"faq-0098", "info-escrow-0007", "faq-0033", "faq-0162"}
@@ -33,6 +33,18 @@ def _offtopic_sample(questions: list[dict]) -> list[dict]:
     return [questions[i] for i in OFFTOPIC_SAMPLE_INDICES]
 
 
+def _two_signal_candidates(retriever, query, audience):
+    total = retriever.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+    n = min(TOP_K_CANDIDATES, total)
+    vector_ranking, best_sim = retriever._vector_candidates(query, n, total, audience)
+    bm25_ranking, best_bm25 = retriever._bm25_candidates(query, n, audience)
+    if best_sim < retriever.sim_threshold or best_bm25 < retriever.bm25_threshold:
+        return [], False
+    ids = union_candidates(vector_ranking, bm25_ranking)
+    docs = [retriever._to_doc(doc_id, 0.0) for doc_id in ids]
+    return docs, True
+
+
 async def _run_known_misses(retriever: Retriever, client) -> None:
     questions = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
     cases = _known_miss_cases(questions)
@@ -40,11 +52,11 @@ async def _run_known_misses(retriever: Retriever, client) -> None:
     for item in cases:
         query = eval_query(item)
         audience = classify_audience(query)
-        docs, gate_open = two_signal_candidates(retriever, query, audience)
+        docs, gate_open = _two_signal_candidates(retriever, query, audience)
         if not gate_open or not docs:
             print(f"  GATE ZU (Stufe 1): {item['question']!r}")
             continue
-        ranking, confidence, used_fallback = await llm_two_signal_rerank(query, docs, client)
+        ranking, confidence, used_fallback, _tokens = await llm_two_signal_rerank(query, docs, client)
         top1_id = docs[ranking[0]].id
         if used_fallback:
             print(f"  PARSE-FALLBACK: {item['question']!r} erwartet "
@@ -63,11 +75,11 @@ async def _run_offtopic_sample(retriever: Retriever, client) -> None:
     for item in sample:
         query = item["question"]
         audience = classify_audience(query)
-        docs, gate_open = two_signal_candidates(retriever, query, audience)
+        docs, gate_open = _two_signal_candidates(retriever, query, audience)
         if not gate_open or not docs:
             print(f"  GATE ZU (Stufe 1, korrekt): {query!r}")
             continue
-        ranking, confidence, used_fallback = await llm_two_signal_rerank(query, docs, client)
+        ranking, confidence, used_fallback, _tokens = await llm_two_signal_rerank(query, docs, client)
         top1_id = docs[ranking[0]].id
         if used_fallback:
             print(f"  PARSE-FALLBACK: {query!r} -> top1 {top1_id} "
@@ -77,7 +89,8 @@ async def _run_offtopic_sample(retriever: Retriever, client) -> None:
 
 
 async def main() -> None:
-    retriever = Retriever(settings.index_dir, settings.corpus_path, reranker=False)
+    retriever = Retriever(settings.index_dir, settings.corpus_path, reranker=False,
+                          use_llm_reranker=False)
     client = get_client()
     await _run_known_misses(retriever, client)
     await _run_offtopic_sample(retriever, client)
