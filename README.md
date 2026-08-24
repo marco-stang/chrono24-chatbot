@@ -13,8 +13,9 @@ dessen Aussagen ein deterministischer Validator gegen den Chatverlauf prüft.
 **Auf einen Blick:**
 
 - **Hybrid-Retrieval:** BM25 (SQLite FTS5) + Vektorsuche (sqlite-vec),
-  RRF-Fusion, Cross-Encoder-Reranker, Synonym-Expansion, LLM-generierte
-  Query-Varianten je FAQ — 91 % Hit-Rate@5,
+  Kandidaten-Union, LLM-Reranker (Claude, Default) mit Cross-Encoder als
+  Config-Flag-Rollback (`USE_LLM_RERANKER=false`), Synonym-Expansion,
+  LLM-generierte Query-Varianten je FAQ — 91 % Hit-Rate@5,
   held-out validiert (100 %)
 - **Antworten nur aus Kontext** (Claude Haiku) mit `[n]`-Quellenangaben;
   ohne Beleg sagt der Bot „weiß ich nicht" — abgesichert in drei Schichten
@@ -969,18 +970,26 @@ Kostendeckel, unabhängig von der IP.
 
 Läuft als Docker-Runtime (siehe `Dockerfile`) auf Render.
 
-- **RAM-Bedarf:** Embedding-Modell plus Cross-Encoder-Reranker brauchen
-  zusammen deutlich mehr als die 512 MB des Render-Free-Tiers — für die
-  Demo ist ein Tier mit ≥ 1 GB nötig oder alternativ Hugging Face Spaces
-  (Docker).
+- **RAM-Bedarf:** mit dem LLM-Reranker als Default (`USE_LLM_RERANKER=true`)
+  lädt der Server nur noch das Embedding-Modell — der Cross-Encoder wird gar
+  nicht erst geladen (`Retriever.__init__` überspringt `_default_reranker()`,
+  siehe `app/retrieval.py`). Nur im Rollback-Fall (`USE_LLM_RERANKER=false`)
+  brauchen Embedding-Modell plus Cross-Encoder-Reranker zusammen deutlich mehr
+  als die 512 MB des Render-Free-Tiers — dann ist ein Tier mit ≥ 1 GB nötig
+  oder alternativ Hugging Face Spaces (Docker).
 
 - **Env-Var:** `ANTHROPIC_API_KEY` muss gesetzt sein — ohne ihn startet der
   Service gar nicht erst (fail-fast beim Boot statt kaputter Antworten zur
-  Laufzeit).
-- **Env-Var `HF_TOKEN`:** seit dem Reranker-Finetune (siehe „Warum
+  Laufzeit). Mit dem LLM-Reranker als Default ist das jetzt auch der einzige
+  Modell-Provider, den der Server zur Laufzeit braucht.
+- **Env-Var `HF_TOKEN`:** nur relevant im Rollback-Fall
+  (`USE_LLM_RERANKER=false`). Seit dem Reranker-Finetune (siehe „Warum
   Hybrid-RAG") nötig, weil `VoidFloat/chrono24-faq-reranker` ein privates
-  Hugging-Face-Hub-Repo ist. Ohne Token schlägt das Laden des Rerankers beim
-  Boot fehl — ein Fine-grained-Token mit `read`-Recht auf das Repo genügt.
+  Hugging-Face-Hub-Repo ist. Ohne Token schlägt in diesem Fall das Laden des
+  Cross-Encoder-Rerankers beim Boot fehl — ein Fine-grained-Token mit
+  `read`-Recht auf das Repo genügt. Mit dem LLM-Reranker als Default
+  (`USE_LLM_RERANKER=true`) wird der Cross-Encoder nie geladen, `HF_TOKEN`
+  ist dann nicht nötig.
 - **Health-Check-Pfad:** `/api/health`.
 - **Kaltstart:** auf dem Render-Free-Tier ca. 30 s, weil der Container nach
   Inaktivität einschläft.
