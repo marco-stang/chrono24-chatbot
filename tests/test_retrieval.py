@@ -32,7 +32,7 @@ def neutral_reranker(query, texts):
     return [1.0 for _ in texts]
 
 
-def make_retriever(tmp_path, reranker, rerank_threshold=-6.0):
+def make_retriever(tmp_path, reranker, rerank_threshold=-6.0, use_llm_reranker=False):
     corpus_path = tmp_path / "corpus.json"
     corpus_path.write_text(json.dumps({"scraped_at": "2026-08-20", "documents": DOCS}),
                            encoding="utf-8")
@@ -49,7 +49,8 @@ def make_retriever(tmp_path, reranker, rerank_threshold=-6.0):
     # konfiguriert ist (die Schwelle ist an ein konkretes Modell gekoppelt,
     # siehe README, Reranker-Finetune).
     return Retriever(index_dir, corpus_path, encoder=encode_one, reranker=reranker,
-                     bm25_threshold=1.0, rerank_threshold=rerank_threshold)
+                     bm25_threshold=1.0, rerank_threshold=rerank_threshold,
+                     use_llm_reranker=use_llm_reranker)
 
 
 @pytest.fixture()
@@ -282,3 +283,135 @@ def test_gate_keeps_candidates_when_reranker_is_merely_unsure(tmp_path):
 
     retriever = make_retriever(tmp_path, reranker=unsure)
     assert retriever.retrieve("Wie funktioniert der Käuferschutz?")
+
+
+from app.retrieval import LLM_CONFIDENCE_THRESHOLD
+
+
+class _FakeRerankClient:
+    def __init__(self, response_text):
+        self._response_text = response_text
+
+    class _FakeTextBlock:
+        type = "text"
+
+        def __init__(self, text):
+            self.text = text
+
+    class _FakeUsage:
+        input_tokens = 50
+        output_tokens = 10
+
+    class _FakeResponse:
+        def __init__(self, text):
+            self.content = [_FakeRerankClient._FakeTextBlock(text)]
+            self.usage = _FakeRerankClient._FakeUsage()
+
+    class _FakeMessages:
+        def __init__(self, response_text):
+            self._response_text = response_text
+
+        async def create(self, **kwargs):
+            return _FakeRerankClient._FakeResponse(self._response_text)
+
+    @property
+    def messages(self):
+        return _FakeRerankClient._FakeMessages(self._response_text)
+
+
+async def test_retrieve_uses_llm_reranker_when_flag_enabled(tmp_path):
+    def encode_no_ties(text):
+        if "Käuferschutz" in text:
+            return [1.0, 0.0, 0.0]
+        if "verkaufe" in text:
+            return [0.8, 0.6, 0.0]
+        if "Versand" in text:
+            return [0.6, 0.0, 0.8]
+        return [-1.0, 0.0, 0.0]
+
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_no_ties(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=encode_no_ties, reranker=False,
+                          bm25_threshold=1.0, use_llm_reranker=True)
+    client = _FakeRerankClient('{"ranking": [1, 0, 2], "top1_confidence": 9}')
+    docs, tokens = await retriever.retrieve("Wie funktioniert der Käuferschutz?", client=client)
+    assert docs[0].id == "faq-0002"
+    assert docs[0].rerank_score == 9.0
+    assert tokens == 60
+
+
+async def test_retrieve_llm_path_abstains_below_confidence_threshold(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=encode_one, reranker=False,
+                          bm25_threshold=1.0, use_llm_reranker=True)
+    low_confidence = LLM_CONFIDENCE_THRESHOLD - 1
+    client = _FakeRerankClient(
+        '{"ranking": [0, 1, 2], "top1_confidence": ' + str(low_confidence) + '}')
+    docs, tokens = await retriever.retrieve("Wie funktioniert der Käuferschutz?", client=client)
+    assert docs == []
+    assert tokens == 60
+
+
+async def test_retrieve_llm_path_abstains_on_parse_fallback(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=encode_one, reranker=False,
+                          bm25_threshold=1.0, use_llm_reranker=True)
+    client = _FakeRerankClient("kaputte Antwort, kein JSON")
+    docs, tokens = await retriever.retrieve("Wie funktioniert der Käuferschutz?", client=client)
+    assert docs == []
+    assert tokens == 60
+
+
+async def test_retrieve_llm_path_gate_fires_before_llm_call(tmp_path):
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    retriever = Retriever(index_dir, corpus_path, encoder=encode_one, reranker=False,
+                          bm25_threshold=1.0, use_llm_reranker=True)
+
+    class _ExplodingClient:
+        @property
+        def messages(self):
+            raise AssertionError("LLM darf bei Off-Topic nicht aufgerufen werden")
+
+    docs, tokens = await retriever.retrieve("Gedicht über Katzen bitte",
+                                            client=_ExplodingClient())
+    assert docs == []
+    assert tokens == 0
+
+
+async def test_retrieve_cross_encoder_path_returns_zero_tokens(tmp_path):
+    retriever = make_retriever(tmp_path, reranker=neutral_reranker, use_llm_reranker=False)
+    docs, tokens = await retriever.retrieve("Wie funktioniert der Käuferschutz?")
+    assert docs
+    assert tokens == 0
+
+
+def test_init_skips_cross_encoder_load_when_llm_reranker_enabled(tmp_path, monkeypatch):
+    def exploding_default_reranker():
+        raise AssertionError("Cross-Encoder darf bei use_llm_reranker=True nicht geladen werden")
+
+    monkeypatch.setattr("app.retrieval._default_reranker", exploding_default_reranker)
+    corpus_path = tmp_path / "corpus.json"
+    corpus_path.write_text(json.dumps({"scraped_at": "2026-08-24", "documents": DOCS}),
+                           encoding="utf-8")
+    index_dir = tmp_path / "index"
+    build_index(corpus_path, index_dir, encoder=lambda texts: [encode_one(t) for t in texts])
+    # Kein reranker=-Override, use_llm_reranker=True -> darf _default_reranker
+    # nicht aufrufen. Waere das Verhalten falsch, wuerde die Zeile oben den
+    # Test mit AssertionError zum Scheitern bringen.
+    Retriever(index_dir, corpus_path, encoder=encode_one, bm25_threshold=1.0,
+             use_llm_reranker=True)

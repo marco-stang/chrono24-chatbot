@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlite_vec
 
 from app.config import settings
+from app.llm_reranker import llm_two_signal_rerank, union_candidates
 from app.textproc import expand_query
 
 TOP_K_CANDIDATES = 10
@@ -46,6 +47,12 @@ BM25_THRESHOLD = 5.5
 # um Off-Topic-Fragen überhaupt zu fangen. Schwelle knapp unter dem
 # on-topic-Minimum, 0 verlorene on-topic-Treffer bei voller Trennung.
 RERANK_THRESHOLD = 2.9
+# Stufe-2-Messung (siehe HANDOVER-llm-reranker.md, Integrationsentscheidung):
+# on-topic-Minimum 9.0, off-topic-Maximum 9.0 (exakte Ueberlappung), Puffer
+# 0.5 wie bei den anderen Schwellen. Ersetzt RERANK_THRESHOLD im LLM-Pfad --
+# RERANK_THRESHOLD selbst bleibt fuer den Cross-Encoder-Rollback-Pfad
+# bestehen.
+LLM_CONFIDENCE_THRESHOLD = 8.5
 # Varianten teilen sich sonst die n Rohplätze: bei bis zu MAX_VARIANTS_PER_DOC
 # Umformulierungen je FAQ kollabieren sie nach der canonical_id-Dedupe wieder
 # auf einen Kandidaten. Deshalb überfetchen und erst nach der Dedupe kappen —
@@ -122,16 +129,27 @@ class Retriever:
     def __init__(self, index_dir: Path, corpus_path: Path, encoder=None, reranker=None,
                  sim_threshold: float = SIM_THRESHOLD,
                  bm25_threshold: float = BM25_THRESHOLD,
-                 rerank_threshold: float = RERANK_THRESHOLD):
-        """reranker: Callable[(query, texts) -> scores] | None (Default-Modell) | False (aus)."""
+                 rerank_threshold: float = RERANK_THRESHOLD,
+                 use_llm_reranker: bool = settings.use_llm_reranker):
+        """reranker: Callable[(query, texts) -> scores] | None (Default-Modell) | False (aus).
+        Nur relevant, wenn use_llm_reranker=False -- der LLM-Pfad ignoriert
+        reranker komplett und braucht stattdessen einen client-Parameter
+        bei retrieve()."""
         self.sim_threshold = sim_threshold
         self.bm25_threshold = bm25_threshold
         self.rerank_threshold = rerank_threshold
+        self.use_llm_reranker = use_llm_reranker
         self.encoder = encoder or _default_encoder()
         if reranker is False:
             self.reranker = None
+        elif reranker is not None:
+            self.reranker = reranker
+        elif self.use_llm_reranker:
+            # Cross-Encoder-Load und HF_TOKEN-Abhaengigkeit entfallen im
+            # LLM-Pfad komplett -- kein reranker=-Override, kein Bedarf.
+            self.reranker = None
         else:
-            self.reranker = reranker or _default_reranker()
+            self.reranker = _default_reranker()
         self.db = _connect(Path(index_dir) / "hybrid.db")
         corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
         self.docs = {d["id"]: d for d in corpus["documents"]}
@@ -196,25 +214,39 @@ class Retriever:
         best_bm25 = -rows[0][1] if rows else 0.0
         return ranking, best_bm25
 
-    def retrieve(self, query: str, top_k: int = 5,
-                 audience: str | None = None) -> list[RetrievedDoc]:
+    async def retrieve(self, query: str, top_k: int = 5,
+                       audience: str | None = None, client=None) -> tuple[list[RetrievedDoc], int]:
+        """Gibt (Dokumente, verbrauchte Reranker-Tokens) zurueck. Tokens
+        sind 0 im Cross-Encoder-Pfad (self.use_llm_reranker=False)."""
         total = self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
         n = min(TOP_K_CANDIDATES, total)
 
-        # Harter Pre-Filter vor der RRF-Fusion (kein Score-Abzug): Kandidaten
-        # der falschen Rolle fliegen aus beiden Rankings komplett raus, statt
-        # nur schlechter bewertet zu werden -- Unterschied zum verworfenen
-        # weichen Rollen-Malus (siehe README). Nur bei eindeutiger
-        # Klassifikation aktiv; "neutral" (Default bei Dokumenten ohne Feld)
-        # passiert den Filter für beide Rollen. Jetzt als SQL-WHERE in beiden
-        # Teil-Queries statt Python-seitigem Filtern (Schritt 2, siehe
-        # corpus-storage-rethink-design.md).
+        # Harter Pre-Filter vor der Kandidaten-Fusion (kein Score-Abzug):
+        # Kandidaten der falschen Rolle fliegen aus beiden Rankings komplett
+        # raus, statt nur schlechter bewertet zu werden. Nur bei eindeutiger
+        # Klassifikation aktiv; "neutral" passiert den Filter fuer beide
+        # Rollen. Als SQL-WHERE in beiden Teil-Queries.
         vector_ranking, best_sim = self._vector_candidates(query, n, total, audience)
         bm25_ranking, best_bm25 = self._bm25_candidates(query, n, audience)
 
-        # Stufe 1 des Gates: billig, vor dem Reranker.
+        # Stufe 1 des Gates: billig, vor jedem Reranking (LLM oder
+        # Cross-Encoder) -- muss fuer beide Pfade identisch bleiben.
         if best_sim < self.sim_threshold or best_bm25 < self.bm25_threshold:
-            return []
+            return [], 0
+
+        if self.use_llm_reranker:
+            ids = union_candidates(vector_ranking, bm25_ranking)
+            docs = [self._to_doc(doc_id, 0.0) for doc_id in ids]
+            ranking, confidence, used_fallback, tokens = await llm_two_signal_rerank(
+                query, docs, client)
+            if used_fallback or confidence < LLM_CONFIDENCE_THRESHOLD:
+                return [], tokens
+            ordered = [docs[i] for i in ranking]
+            # Konfidenz gilt nur fuer Position 0 (siehe Spec) -- nur dort
+            # gesetzt, fuer SSE-Observability analog zum rerank_score im
+            # Cross-Encoder-Pfad.
+            ordered[0].rerank_score = round(confidence, 4)
+            return ordered[:top_k], tokens
 
         fused = rrf_fuse([vector_ranking, bm25_ranking])
         candidates = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:n]
@@ -227,8 +259,8 @@ class Retriever:
             # Stufe 2: passt selbst der beste Kandidat laut Cross-Encoder
             # eindeutig nicht, lieber leer als raten.
             if docs and docs[0].rerank_score < self.rerank_threshold:
-                return []
-        return docs[:top_k]
+                return [], 0
+        return docs[:top_k], 0
 
     def _to_doc(self, doc_id: str, score: float) -> RetrievedDoc:
         doc = self.docs[doc_id]
